@@ -19,8 +19,12 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Supplier;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public final class ToolGateway {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(ToolGateway.class);
 
     private final Map<String, ToolHandler<?, ?>> handlers;
     private final ObjectMapper objectMapper;
@@ -161,6 +165,15 @@ public final class ToolGateway {
                 duration,
                 null,
                 clock.instant()));
+        LOGGER.atInfo()
+                .addKeyValue("event", "INCIDENT_TOOL_EXECUTED")
+                .addKeyValue("incidentId", incidentId)
+                .addKeyValue("toolName", toolName)
+                .addKeyValue("toolVersion", handler.definition().version())
+                .addKeyValue("success", true)
+                .addKeyValue("evidenceCount", result.evidenceIds().size())
+                .addKeyValue("durationMs", duration.toMillis())
+                .log("Incident tool executed");
         return result;
     }
 
@@ -189,6 +202,15 @@ public final class ToolGateway {
                 duration,
                 errorCode,
                 clock.instant()));
+        LOGGER.atWarn()
+                .addKeyValue("event", "INCIDENT_TOOL_FAILED")
+                .addKeyValue("incidentId", incidentId)
+                .addKeyValue("toolName", toolName)
+                .addKeyValue("toolVersion", version)
+                .addKeyValue("success", false)
+                .addKeyValue("errorCode", errorCode)
+                .addKeyValue("durationMs", duration.toMillis())
+                .log("Incident tool failed");
         return result;
     }
 

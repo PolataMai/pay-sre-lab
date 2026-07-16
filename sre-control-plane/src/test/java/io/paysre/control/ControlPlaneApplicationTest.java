@@ -11,6 +11,13 @@ import io.paysre.control.investigation.InvestigationOrchestrator;
 import io.paysre.control.tools.ToolGateway;
 import io.paysre.control.tools.ToolHandler;
 import java.util.List;
+import io.paysre.control.alerting.AlertSignal;
+import io.paysre.control.alerting.Severity;
+import java.time.Instant;
+import java.util.Map;
+import ch.qos.logback.classic.LoggerContext;
+import ch.qos.logback.core.status.Status;
+import org.slf4j.LoggerFactory;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -64,5 +71,29 @@ class ControlPlaneApplicationTest {
                         "get_payment_timeline",
                         "query_channel_final_state",
                         "calculate_incident_impact");
+    }
+
+    @Test
+    void incidentBusinessFieldsDoNotCollideWithReservedEcsMembers() {
+        var loggerContext = (LoggerContext) LoggerFactory.getILoggerFactory();
+        long errorsBefore = loggerContext.getStatusManager().getCopyOfStatusList().stream()
+                .filter(status -> status.getLevel() == Status.ERROR)
+                .count();
+
+        incidentService.ingest(new AlertSignal(
+                "ALERT-STRUCTURED-LOG",
+                "TEST",
+                "payment-service",
+                "PaymentUnknownHigh",
+                Severity.HIGH,
+                Instant.parse("2026-07-16T10:00:00Z"),
+                Map.of("channel", "CHANNEL_A"),
+                null,
+                null));
+
+        assertThat(loggerContext.getStatusManager().getCopyOfStatusList().stream()
+                        .filter(status -> status.getLevel() == Status.ERROR)
+                        .count())
+                .isEqualTo(errorsBefore);
     }
 }

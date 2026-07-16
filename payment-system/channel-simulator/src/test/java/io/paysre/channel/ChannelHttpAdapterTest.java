@@ -3,6 +3,8 @@ package io.paysre.channel;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import io.opentelemetry.api.OpenTelemetry;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
@@ -14,7 +16,11 @@ class ChannelHttpAdapterTest {
     @Test
     void mapsChannelTimeoutToAStableGatewayTimeoutProblem() {
         var service = new ChannelSimulationService(
-                new InMemoryFaultRuleRepository(), new FaultDecider(), Clock.systemUTC());
+                new InMemoryFaultRuleRepository(),
+                new FaultDecider(),
+                Clock.systemUTC(),
+                new ChannelMetrics(new SimpleMeterRegistry()),
+                new ChannelTelemetry(OpenTelemetry.noop().getTracer("test")));
         var controller = new ChannelPaymentController(service);
 
         var problem = controller.timeout(new ChannelTimeoutException("PAY-1"));

@@ -9,8 +9,12 @@ import io.paysre.payment.observability.PaymentTelemetry;
 import java.time.Clock;
 import java.util.Objects;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public final class PaymentApplicationService {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(PaymentApplicationService.class);
 
     private final PaymentRepository repository;
     private final ChannelClient channelClient;
@@ -75,7 +79,21 @@ public final class PaymentApplicationService {
         var saved = repository.save(payment, command.idempotencyKey());
         metrics.recordTransition(
                 payment.channel(), PaymentStatus.PROCESSING, payment.status());
+        logTransition(payment);
         return saved;
+    }
+
+    private void logTransition(PaymentOrder payment) {
+        var event = payment.events().get(payment.events().size() - 1);
+        LOGGER.atInfo()
+                .addKeyValue("event", "PAYMENT_STATE_CHANGED")
+                .addKeyValue("paymentId", payment.paymentId())
+                .addKeyValue("orderId", payment.orderId())
+                .addKeyValue("channel", payment.channel())
+                .addKeyValue("fromStatus", PaymentStatus.PROCESSING.name())
+                .addKeyValue("toStatus", payment.status().name())
+                .addKeyValue("reasonCode", event.reasonCode())
+                .log("Payment state changed");
     }
 
     private ChannelPaymentRequest toChannelRequest(PaymentOrder payment) {

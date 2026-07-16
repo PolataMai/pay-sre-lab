@@ -158,14 +158,14 @@ public record DistributedTraceQuery(
 - Test: `ChannelTelemetryTest.java`
 - Test: `PaymentStructuredLoggingTest.java`
 
-- [ ] Write failing tests for `channel_request_total{channel,result}`, request duration, `payment.channel.invoke`, and timeout/success state attributes.
-- [ ] Add structured SLF4J key-value events for fault activation, channel final-state persistence, payment state transition, alert intake, incident creation, tool execution, and investigation completion.
-- [ ] Configure ECS JSON for console and file outputs. Set service name from `spring.application.name`; preserve Boot-provided correlation IDs.
-- [ ] Add only business identifiers needed for correlation; verify request bodies and secrets never appear.
-- [ ] Add a regression test that rejects PAN-like values, authorization headers, signatures, and full request objects in known payment log events.
-- [ ] Verify Prometheus meter IDs contain no high-cardinality labels.
-- [ ] Run focused tests, then the three service module test suites.
-- [ ] Commit: `feat: emit correlated payment telemetry`
+- [x] Write failing tests for `channel_request_total{channel,result}`, request duration, `payment.channel.invoke`, and timeout/success state attributes.
+- [x] Add structured SLF4J key-value events for fault activation, channel final-state persistence, payment state transition, alert intake, incident creation, tool execution, and investigation completion.
+- [x] Configure ECS JSON for console and file outputs. Set service name from `spring.application.name`; preserve Boot-provided correlation IDs.
+- [x] Add only business identifiers needed for correlation; verify request bodies and secrets never appear.
+- [x] Add a regression test that rejects PAN-like values, authorization headers, signatures, and full request objects in known payment log events.
+- [x] Verify Prometheus meter IDs contain no high-cardinality labels.
+- [x] Run focused tests, then the three service module test suites.
+- [x] Commit: `feat: emit correlated payment telemetry`
 
 ## Task 3: Deploy the local observability stack as code
 

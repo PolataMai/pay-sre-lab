@@ -19,6 +19,12 @@ paysre:
 server:
   port: ${CONTROL_PLANE_PORT:8082}
 
+logging:
+  structured:
+    format:
+      console: ecs
+      file: ecs
+
 management:
   otlp:
     metrics:

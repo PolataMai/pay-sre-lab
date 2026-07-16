@@ -5,6 +5,12 @@ spring:
 server:
   port: ${CHANNEL_SIMULATOR_PORT:8081}
 
+logging:
+  structured:
+    format:
+      console: ecs
+      file: ecs
+
 management:
   otlp:
     metrics:

@@ -11,6 +11,12 @@ spring:
 server:
   port: ${PAYMENT_SERVICE_PORT:8080}
 
+logging:
+  structured:
+    format:
+      console: ecs
+      file: ecs
+
 management:
   otlp:
     metrics:
