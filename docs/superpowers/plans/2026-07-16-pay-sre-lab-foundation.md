@@ -128,7 +128,7 @@ Expected: FAIL because `Money` does not exist.
   <properties>
     <java.version>21</java.version>
     <spring-ai.version>2.0.0</spring-ai.version>
-    <testcontainers.version>1.21.3</testcontainers.version>
+    <testcontainers.version>2.0.5</testcontainers.version>
   </properties>
   <modules>
     <module>platform-contracts</module>
