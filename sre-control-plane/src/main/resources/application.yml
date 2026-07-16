@@ -1,0 +1,18 @@
+spring:
+  application:
+    name: sre-control-plane
+  datasource:
+    url: ${CONTROL_DB_URL:jdbc:postgresql://localhost:5432/paysre_control}
+    username: ${CONTROL_DB_USERNAME:paysre}
+    password: ${CONTROL_DB_PASSWORD:paysre}
+  flyway:
+    enabled: true
+
+server:
+  port: ${CONTROL_PLANE_PORT:8082}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
