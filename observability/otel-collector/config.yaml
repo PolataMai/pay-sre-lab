@@ -27,11 +27,11 @@ receivers:
         severity:
           parse_from: attributes["log"]["level"]
       - type: trace_parser
-        if: 'attributes.trace != nil and attributes.span != nil'
+        if: 'attributes.traceId != nil and attributes.spanId != nil'
         trace_id:
-          parse_from: attributes.trace.id
+          parse_from: attributes.traceId
         span_id:
-          parse_from: attributes.span.id
+          parse_from: attributes.spanId
         on_error: send
       - type: move
         from: attributes.message

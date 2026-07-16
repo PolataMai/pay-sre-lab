@@ -291,7 +291,7 @@ public record DistributedTraceQuery(
 - The Compose E2E is opt-in with `PAY_SRE_COMPOSE_E2E=true`; normal non-Docker Maven verification compiles it but skips execution.
 - CI first runs the full reactor, then starts `deploy/compose.yaml` with `--wait`, and finally runs the scenario against host ports. Teardown is unconditional and failure uploads both Surefire and Compose diagnostics.
 - Readiness polling has a 90-second total bound and requires all three facts before investigation starts: UNKNOWN Gauge at the expected value, a representative payment log with `CHANNEL_TIMEOUT` and TraceId, and a Tempo Trace for that ID.
-- ECS `trace.id` and `span.id` are promoted with Collector `trace_parser`; the trace tool is therefore seeded from the LogRecord TraceId rather than a model-generated ID.
+- ECS `traceId` and `spanId` are promoted with Collector `trace_parser`; the trace tool is therefore seeded from the LogRecord TraceId rather than a model-generated ID.
 - Evidence JSON objects are recursively key-sorted before hashing. Arrays preserve source order. The E2E independently canonicalizes every returned content value and recomputes SHA-256.
 - The list API remains metadata-only. `GET /api/incidents/{incidentId}/evidence/{evidenceId}` exposes safe normalized content only after Incident ownership validation; `GET /api/incidents/{incidentId}/tool-audits` exposes the complete read-only invocation chain.
 - Runtime containers and the log-volume initializer share UID/GID 10001 so ECS file logging remains non-root and writable.

@@ -160,7 +160,7 @@ PAY_SRE_COMPOSE_E2E=true mvn -B -ntp -pl e2e-tests -am \
 
 - **Compose 一直等待健康检查**：运行 `docker compose -f deploy/compose.yaml ps --all`，再用 `docker compose -f deploy/compose.yaml logs <service>` 查看具体服务。CI 失败会自动上传完整 Compose 日志。
 - **调查立即转人工且提示指标不可用**：至少等待一个 5 秒 Prometheus 抓取周期，并确认 `http://localhost:9090/api/v1/targets` 中三个应用为 `UP`。
-- **日志存在但没有 TraceId**：确认 Collector 配置包含 `trace_parser`，并检查应用文件日志中的 ECS `trace.id`/`span.id`。
+- **日志存在但没有 TraceId**：确认 Collector 配置包含 `trace_parser`，并检查应用文件日志中的 ECS `traceId`/`spanId`。
 - **本机没有 Docker**：仍可运行 `mvn clean verify`；完整证据链以 GitHub Actions 的 Java 21 + Docker 结果为权威验收。
 
 ## License

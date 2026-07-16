@@ -195,19 +195,24 @@ class ChannelTimeoutButSuccessE2ETest {
             throws InterruptedException {
         Instant deadline = Instant.now().plus(INGESTION_TIMEOUT);
         String traceId = null;
+        boolean metricsReady = false;
+        boolean traceReady = false;
         while (Instant.now().isBefore(deadline)) {
-            boolean metricsReady = metricShowsUnknown(channel, expectedUnknownCount);
+            metricsReady = metricShowsUnknown(channel, expectedUnknownCount);
             if (traceId == null) {
                 traceId = findTraceIdInLogs(paymentId, from).orElse(null);
             }
-            boolean traceReady = traceId != null && tempoHasTrace(traceId);
+            traceReady = traceId != null && tempoHasTrace(traceId);
             if (metricsReady && traceReady) {
                 return new TelemetrySnapshot(traceId);
             }
             Thread.sleep(Duration.ofSeconds(2).toMillis());
         }
-        throw new AssertionError(
-                "telemetry was not ingested within " + INGESTION_TIMEOUT);
+        throw new AssertionError("telemetry was not ingested within "
+                + INGESTION_TIMEOUT
+                + ": metricsReady=" + metricsReady
+                + ", logTraceId=" + traceId
+                + ", tempoReady=" + traceReady);
     }
 
     private boolean metricShowsUnknown(String channel, int expectedUnknownCount) {
@@ -230,7 +235,8 @@ class ChannelTimeoutButSuccessE2ETest {
     private Optional<String> findTraceIdInLogs(String paymentId, Instant from) {
         var query = "{service_name=\"payment-service\"}"
                 + " | paymentId=\"" + paymentId + "\""
-                + " | event=\"PAYMENT_STATE_CHANGED\"";
+                + " | event=\"PAYMENT_STATE_CHANGED\""
+                + " | reasonCode=\"CHANNEL_TIMEOUT\"";
         return tryGetJson(queryUri(
                         LOKI_BASE_URL,
                         "/loki/api/v1/query_range",
@@ -241,16 +247,15 @@ class ChannelTimeoutButSuccessE2ETest {
                                 "limit", "20",
                                 "direction", "backward")))
                 .flatMap(root -> iterable(root.path("data").path("result")).stream()
-                        .flatMap(stream -> iterable(stream.path("values")).stream())
-                        .filter(value -> value.isArray()
-                                && value.size() >= 3
-                                && value.get(2).isObject())
-                        .map(value -> value.get(2))
-                        .filter(metadata -> paymentId.equals(
-                                metadata.path("paymentId").asText()))
-                        .filter(metadata -> "CHANNEL_TIMEOUT".equals(
-                                metadata.path("reasonCode").asText()))
-                        .map(metadata -> firstText(metadata, "trace_id", "traceId"))
+                        .flatMap(stream -> iterable(stream.path("values")).stream()
+                                .map(value -> firstText(
+                                        value.isArray()
+                                                        && value.size() >= 3
+                                                        && value.get(2).isObject()
+                                                ? value.get(2)
+                                                : objectMapper.createObjectNode(),
+                                        "trace_id",
+                                        "traceId")))
                         .filter(id -> id.matches("[a-fA-F0-9]{32}"))
                         .map(id -> id.toLowerCase(java.util.Locale.ROOT))
                         .findFirst());

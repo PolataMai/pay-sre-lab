@@ -72,9 +72,9 @@ Spring Boot 输出 ECS JSON。支付状态变更日志携带：
 - `event=PAYMENT_STATE_CHANGED`
 - `paymentId`, `orderId`, `channel`
 - `fromStatus`, `toStatus`, `reasonCode`
-- ECS `trace.id` 和 `span.id`
+- ECS `traceId` 和 `spanId`
 
-应用以非 root UID/GID `10001` 写共享只写日志卷。Collector 的 `filelog` Receiver 解析 ECS JSON，`trace_parser` 把 ECS Trace 字段提升为 OTLP LogRecord 的 TraceId/SpanId，再通过 Loki 原生 OTLP 入口发送。这样 Loki 返回的 `trace_id` 是日志上下文本身携带的 ID，而不是 Agent 猜出的字符串。
+应用以非 root UID/GID `10001` 写共享只写日志卷。Collector 的 `filelog` Receiver 解析 ECS JSON，`trace_parser` 把 ECS 顶层 `traceId`/`spanId` 字段提升为 OTLP LogRecord 的 TraceId/SpanId，再通过 Loki 原生 OTLP 入口发送。这样 Loki 返回的 `trace_id` 是日志上下文本身携带的 ID，而不是 Agent 猜出的字符串。
 
 日志工具只投影安全字段，单条消息最多 2 KiB，总结果最多 200 条、1 MiB 后端响应、64 KiB Evidence。
 
