@@ -8,4 +8,4 @@ target/
 *.log
 .env
 deploy/.env
-
+work/
