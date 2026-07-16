@@ -82,6 +82,23 @@ class JdbcPaymentRepositoryTest {
         assertThat(duplicate.paymentId()).isEqualTo("P10001");
     }
 
+    @Test
+    void queriesOnlyUnknownPaymentsInTheRequestedTimeWindow() {
+        var unknown = processingPayment("P10001");
+        repository.save(unknown, "IDEMPOTENCY-1");
+        unknown.markUnknown("CHANNEL_TIMEOUT", Instant.EPOCH.plusSeconds(1));
+        repository.save(unknown, "IDEMPOTENCY-1");
+
+        var result = repository.findUnknown(
+                Instant.EPOCH, Instant.EPOCH.plusSeconds(60), 50);
+
+        assertThat(result).singleElement()
+                .satisfies(payment -> {
+                    assertThat(payment.paymentId()).isEqualTo("P10001");
+                    assertThat(payment.status()).isEqualTo(PaymentStatus.UNKNOWN);
+                });
+    }
+
     private PaymentOrder processingPayment(String paymentId) {
         var payment = PaymentOrder.create(
                 paymentId,

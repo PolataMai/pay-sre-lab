@@ -5,6 +5,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import io.paysre.contracts.ChannelPaymentResponse;
 import io.paysre.contracts.ChannelResult;
 import io.paysre.contracts.Money;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import io.opentelemetry.api.OpenTelemetry;
+import io.paysre.payment.observability.PaymentMetrics;
+import io.paysre.payment.observability.PaymentTelemetry;
 import io.paysre.payment.domain.PaymentOrder;
 import io.paysre.payment.domain.PaymentStatus;
 import java.math.BigDecimal;
@@ -70,13 +74,40 @@ class PaymentApplicationServiceTest {
                 .isEqualTo(PaymentStatus.SUCCESS);
     }
 
+    @Test
+    void recordsTheUnknownBusinessOutcomeWhenTheChannelTimesOut() {
+        var repository = new InMemoryPaymentRepository();
+        var registry = new SimpleMeterRegistry();
+        ChannelClient channel = request -> {
+            throw new ChannelCallTimeoutException(request.paymentId());
+        };
+        var service = service(repository, channel, registry);
+
+        service.accept(command("IDEMPOTENCY-4"));
+
+        assertThat(registry.get("payment_attempt_outcome_total")
+                        .tags("channel", "CHANNEL_A", "status", "UNKNOWN")
+                        .counter()
+                        .count())
+                .isEqualTo(1.0);
+    }
+
     private PaymentApplicationService service(
             PaymentRepository repository, ChannelClient channelClient) {
+        return service(repository, channelClient, new SimpleMeterRegistry());
+    }
+
+    private PaymentApplicationService service(
+            PaymentRepository repository,
+            ChannelClient channelClient,
+            SimpleMeterRegistry registry) {
         return new PaymentApplicationService(
                 repository,
                 channelClient,
                 () -> "P10001",
-                Clock.fixed(NOW, ZoneOffset.UTC));
+                Clock.fixed(NOW, ZoneOffset.UTC),
+                new PaymentMetrics(registry),
+                new PaymentTelemetry(OpenTelemetry.noop().getTracer("test")));
     }
 
     private AcceptPaymentCommand command(String idempotencyKey) {
@@ -106,6 +137,12 @@ class PaymentApplicationServiceTest {
             return payments.values().stream()
                     .filter(payment -> payment.paymentId().equals(paymentId))
                     .findFirst();
+        }
+
+        @Override
+        public java.util.List<UnknownPaymentSummary> findUnknown(
+                Instant from, Instant to, int size) {
+            return java.util.List.of();
         }
 
         @Override

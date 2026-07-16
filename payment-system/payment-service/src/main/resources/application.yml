@@ -11,6 +11,12 @@ spring:
 server:
   port: ${PAYMENT_SERVICE_PORT:8080}
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+
 paysre:
   channel:
     base-url: ${CHANNEL_BASE_URL:http://localhost:8081}

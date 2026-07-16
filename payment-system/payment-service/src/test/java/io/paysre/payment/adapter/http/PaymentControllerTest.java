@@ -8,6 +8,8 @@ import static org.mockito.Mockito.when;
 import io.paysre.contracts.Money;
 import io.paysre.payment.application.PaymentApplicationService;
 import io.paysre.payment.application.PaymentRepository;
+import io.paysre.payment.application.UnknownPaymentQueryService;
+import io.paysre.payment.application.UnknownPaymentSummary;
 import io.paysre.payment.domain.PaymentOrder;
 import io.paysre.payment.domain.PaymentStatus;
 import java.math.BigDecimal;
@@ -24,7 +26,10 @@ class PaymentControllerTest {
         var payment = unknownPayment();
         var repository = mock(PaymentRepository.class);
         when(repository.findByPaymentId("P10001")).thenReturn(Optional.of(payment));
-        var controller = new PaymentController(mock(PaymentApplicationService.class), repository);
+        var controller = new PaymentController(
+                mock(PaymentApplicationService.class),
+                repository,
+                mock(UnknownPaymentQueryService.class));
 
         var view = controller.get("P10001");
 
@@ -39,13 +44,39 @@ class PaymentControllerTest {
     void mapsMissingPaymentToANotFoundProblem() {
         var repository = mock(PaymentRepository.class);
         when(repository.findByPaymentId("MISSING")).thenReturn(Optional.empty());
-        var controller = new PaymentController(mock(PaymentApplicationService.class), repository);
+        var controller = new PaymentController(
+                mock(PaymentApplicationService.class),
+                repository,
+                mock(UnknownPaymentQueryService.class));
 
         assertThatThrownBy(() -> controller.get("MISSING"))
                 .isInstanceOf(PaymentNotFoundException.class);
         var problem = controller.notFound(new PaymentNotFoundException("MISSING"));
         assertThat(problem.getStatus()).isEqualTo(HttpStatus.NOT_FOUND.value());
         assertThat(problem.getProperties()).containsEntry("code", "PAYMENT_NOT_FOUND");
+    }
+
+    @Test
+    void exposesTheBoundedUnknownPaymentQuery() {
+        var query = mock(UnknownPaymentQueryService.class);
+        var from = Instant.parse("2026-07-16T00:00:00Z");
+        var to = from.plusSeconds(3_600);
+        var expected = new UnknownPaymentSummary(
+                "P10001",
+                "O10001",
+                new BigDecimal("10.00"),
+                "CNY",
+                "CHANNEL_A",
+                PaymentStatus.UNKNOWN,
+                from.plusSeconds(1));
+        when(query.find(from, to, 50)).thenReturn(java.util.List.of(expected));
+        var controller = new PaymentController(
+                mock(PaymentApplicationService.class),
+                mock(PaymentRepository.class),
+                query);
+
+        assertThat(controller.search(PaymentStatus.UNKNOWN, from, to, 50))
+                .containsExactly(expected);
     }
 
     private PaymentOrder unknownPayment() {

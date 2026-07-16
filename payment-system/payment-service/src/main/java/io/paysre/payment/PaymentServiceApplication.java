@@ -5,6 +5,11 @@ import io.paysre.payment.application.ChannelClient;
 import io.paysre.payment.application.PaymentApplicationService;
 import io.paysre.payment.application.PaymentIdGenerator;
 import io.paysre.payment.application.PaymentRepository;
+import io.paysre.payment.application.UnknownPaymentQueryService;
+import io.paysre.payment.observability.PaymentMetrics;
+import io.paysre.payment.observability.PaymentTelemetry;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.opentelemetry.api.GlobalOpenTelemetry;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.UUID;
@@ -45,11 +50,30 @@ public class PaymentServiceApplication {
     }
 
     @Bean
+    PaymentMetrics paymentMetrics(MeterRegistry registry) {
+        return new PaymentMetrics(registry);
+    }
+
+    @Bean
+    PaymentTelemetry paymentTelemetry() {
+        return new PaymentTelemetry(
+                GlobalOpenTelemetry.getTracer("io.paysre.payment-service"));
+    }
+
+    @Bean
+    UnknownPaymentQueryService unknownPaymentQueryService(PaymentRepository repository) {
+        return new UnknownPaymentQueryService(repository);
+    }
+
+    @Bean
     PaymentApplicationService paymentApplicationService(
             PaymentRepository repository,
             ChannelClient channelClient,
             PaymentIdGenerator ids,
-            Clock clock) {
-        return new PaymentApplicationService(repository, channelClient, ids, clock);
+            Clock clock,
+            PaymentMetrics metrics,
+            PaymentTelemetry telemetry) {
+        return new PaymentApplicationService(
+                repository, channelClient, ids, clock, metrics, telemetry);
     }
 }

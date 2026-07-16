@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.paysre.contracts.Money;
 import io.paysre.payment.application.PaymentRepository;
+import io.paysre.payment.application.UnknownPaymentSummary;
 import io.paysre.payment.domain.PaymentEvent;
 import io.paysre.payment.domain.PaymentOrder;
 import io.paysre.payment.domain.PaymentStatus;
@@ -12,6 +13,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.math.RoundingMode;
 import java.time.OffsetDateTime;
+import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Currency;
 import java.util.List;
@@ -85,6 +87,37 @@ public class JdbcPaymentRepository implements PaymentRepository {
         return findOne(
                 "select " + ORDER_COLUMNS + " from payment_order where payment_id = ?",
                 paymentId);
+    }
+
+    @Override
+    public List<UnknownPaymentSummary> findUnknown(Instant from, Instant to, int size) {
+        return jdbc.query("""
+                        select payment_id, order_id, amount, currency,
+                               selected_channel, status, updated_at
+                          from payment_order
+                         where status = 'UNKNOWN'
+                           and updated_at >= ?
+                           and updated_at < ?
+                         order by updated_at, payment_id
+                         limit ?
+                        """,
+                (resultSet, rowNumber) -> {
+                    var currency = Currency.getInstance(
+                            resultSet.getString("currency").trim());
+                    return new UnknownPaymentSummary(
+                            resultSet.getString("payment_id"),
+                            resultSet.getString("order_id"),
+                            resultSet.getBigDecimal("amount").setScale(
+                                    currency.getDefaultFractionDigits(),
+                                    RoundingMode.UNNECESSARY),
+                            currency.getCurrencyCode(),
+                            resultSet.getString("selected_channel"),
+                            PaymentStatus.valueOf(resultSet.getString("status")),
+                            resultSet.getObject("updated_at", OffsetDateTime.class).toInstant());
+                },
+                OffsetDateTime.ofInstant(from, ZoneOffset.UTC),
+                OffsetDateTime.ofInstant(to, ZoneOffset.UTC),
+                size);
     }
 
     @Override
