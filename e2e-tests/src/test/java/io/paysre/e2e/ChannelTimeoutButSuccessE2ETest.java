@@ -48,6 +48,7 @@ class ChannelTimeoutButSuccessE2ETest {
     private final HttpClient http = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(5))
             .build();
+    private String lastLokiResponse = "<not queried>";
 
     @Test
     void provesAnAuditedMetricLogTraceInvestigationOfALostChannelResponse()
@@ -212,7 +213,8 @@ class ChannelTimeoutButSuccessE2ETest {
                 + INGESTION_TIMEOUT
                 + ": metricsReady=" + metricsReady
                 + ", logTraceId=" + traceId
-                + ", tempoReady=" + traceReady);
+                + ", tempoReady=" + traceReady
+                + ", lastLokiResponse=" + lastLokiResponse);
     }
 
     private boolean metricShowsUnknown(String channel, int expectedUnknownCount) {
@@ -237,15 +239,24 @@ class ChannelTimeoutButSuccessE2ETest {
                 + " | paymentId=\"" + paymentId + "\""
                 + " | event=\"PAYMENT_STATE_CHANGED\""
                 + " | reasonCode=\"CHANNEL_TIMEOUT\"";
-        return tryGetJson(queryUri(
-                        LOKI_BASE_URL,
-                        "/loki/api/v1/query_range",
-                        Map.of(
-                                "query", query,
-                                "start", epochNanos(from.minusSeconds(60)),
-                                "end", epochNanos(Instant.now()),
-                                "limit", "20",
-                                "direction", "backward")))
+        return tryGetJson(
+                        queryUri(
+                                LOKI_BASE_URL,
+                                "/loki/api/v1/query_range",
+                                Map.of(
+                                        "query", query,
+                                        "start", epochNanos(from.minusSeconds(60)),
+                                        "end", epochNanos(Instant.now()),
+                                        "limit", "20",
+                                        "direction", "backward")),
+                        Map.of("X-Loki-Response-Encoding-Flags", "categorize-labels"))
+                .map(root -> {
+                    var response = root.toString();
+                    lastLokiResponse = response.length() <= 2_048
+                            ? response
+                            : response.substring(0, 2_048) + "...";
+                    return root;
+                })
                 .flatMap(root -> iterable(root.path("data").path("result")).stream()
                         .flatMap(stream -> iterable(stream.path("values")).stream()
                                 .map(this::traceIdFromLokiValue))
@@ -366,12 +377,16 @@ class ChannelTimeoutButSuccessE2ETest {
     }
 
     private Optional<JsonNode> tryGetJson(URI uri) {
+        return tryGetJson(uri, Map.of());
+    }
+
+    private Optional<JsonNode> tryGetJson(URI uri, Map<String, String> headers) {
         try {
+            var request = HttpRequest.newBuilder(uri)
+                    .timeout(Duration.ofSeconds(5));
+            headers.forEach(request::header);
             var response = http.send(
-                    HttpRequest.newBuilder(uri)
-                            .timeout(Duration.ofSeconds(5))
-                            .GET()
-                            .build(),
+                    request.GET().build(),
                     HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() != 200) {
                 return Optional.empty();

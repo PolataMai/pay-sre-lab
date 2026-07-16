@@ -53,6 +53,7 @@ public final class HttpLokiReadClient implements LokiReadClient {
                             .queryParam("limit", search.limit())
                             .queryParam("direction", "backward")
                             .build(Map.of("logql", logQl)))
+                    .header("X-Loki-Response-Encoding-Flags", "categorize-labels")
                     .retrieve()
                     .body(String.class);
         } catch (RestClientException ignored) {

@@ -26,6 +26,9 @@ class HttpLokiReadClientTest {
         fixture.server.expect(request -> {
                     assertThat(request.getURI().getPath())
                             .isEqualTo("/loki/api/v1/query_range");
+                    assertThat(request.getHeaders()
+                                    .getFirst("X-Loki-Response-Encoding-Flags"))
+                            .isEqualTo("categorize-labels");
                     assertThat(request.getURI().getRawQuery()).doesNotContain("{", " ");
                     var decoded = URLDecoder.decode(
                             request.getURI().getRawQuery(), StandardCharsets.UTF_8);
