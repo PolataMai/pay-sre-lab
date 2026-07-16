@@ -248,17 +248,28 @@ class ChannelTimeoutButSuccessE2ETest {
                                 "direction", "backward")))
                 .flatMap(root -> iterable(root.path("data").path("result")).stream()
                         .flatMap(stream -> iterable(stream.path("values")).stream()
-                                .map(value -> firstText(
-                                        value.isArray()
-                                                        && value.size() >= 3
-                                                        && value.get(2).isObject()
-                                                ? value.get(2)
-                                                : objectMapper.createObjectNode(),
-                                        "trace_id",
-                                        "traceId")))
+                                .map(this::traceIdFromLokiValue))
                         .filter(id -> id.matches("[a-fA-F0-9]{32}"))
                         .map(id -> id.toLowerCase(java.util.Locale.ROOT))
                         .findFirst());
+    }
+
+    private String traceIdFromLokiValue(JsonNode value) {
+        if (!value.isArray() || value.size() < 3 || !value.get(2).isObject()) {
+            return "";
+        }
+        var metadata = value.get(2);
+        for (var source : List.of(
+                metadata.path("structuredMetadata"),
+                metadata.path("structured_metadata"),
+                metadata,
+                metadata.path("parsed"))) {
+            var traceId = firstText(source, "trace_id", "traceId");
+            if (traceId.matches("[a-fA-F0-9]{32}")) {
+                return traceId;
+            }
+        }
+        return "";
     }
 
     private boolean tempoHasTrace(String traceId) {

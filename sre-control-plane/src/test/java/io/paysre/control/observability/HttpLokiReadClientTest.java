@@ -48,13 +48,19 @@ class HttpLokiReadClientTest {
                               "1784203199123456789",
                               "Payment state changed",
                               {
-                                "severity_text":"WARN",
-                                "traceId":"5b8efff798038103d269b633813fc700",
-                                "spanId":"eee19b7ec3c1b100",
-                                "event":"PAYMENT_STATE_CHANGED",
-                                "paymentId":"PAY-42",
-                                "reasonCode":"CHANNEL_TIMEOUT",
-                                "authorization":"must-not-leak"
+                                "structuredMetadata":{
+                                  "severity_text":"WARN",
+                                  "trace_id":"5b8efff798038103d269b633813fc700",
+                                  "span_id":"eee19b7ec3c1b100",
+                                  "event":"PAYMENT_STATE_CHANGED",
+                                  "paymentId":"PAY-42",
+                                  "reasonCode":"CHANNEL_TIMEOUT",
+                                  "authorization":"must-not-leak"
+                                },
+                                "parsed":{
+                                  "trace_id":"00000000000000000000000000000000",
+                                  "reasonCode":"PARSED_VALUE_MUST_NOT_OVERRIDE_SOURCE"
+                                }
                               }
                             ]]
                           }]}
@@ -82,6 +88,39 @@ class HttpLokiReadClientTest {
             assertThat(record.reasonCode()).isEqualTo("CHANNEL_TIMEOUT");
             assertThat(record.message()).isEqualTo("Payment state changed");
             assertThat(record.toString()).doesNotContain("authorization", "must-not-leak");
+        });
+        fixture.server.verify();
+    }
+
+    @Test
+    void remainsCompatibleWithFlatStructuredMetadataResponses() {
+        var fixture = fixture();
+        fixture.server.expect(request -> {}).andRespond(withSuccess("""
+                {
+                  "status":"success",
+                  "data":{"resultType":"streams","result":[{
+                    "stream":{"service_name":"payment-service"},
+                    "values":[[
+                      "1784203199123456789",
+                      "Payment state changed",
+                      {
+                        "severity_text":"INFO",
+                        "traceId":"5b8efff798038103d269b633813fc700",
+                        "spanId":"eee19b7ec3c1b100",
+                        "event":"PAYMENT_STATE_CHANGED"
+                      }
+                    ]]
+                  }]}
+                }
+                """, MediaType.APPLICATION_JSON));
+
+        var result = fixture.client.search(new StructuredLogSearch(
+                "payment-service", LogEvent.PAYMENT_STATE_CHANGED, LogLevel.INFO,
+                null, null, NOW.minusSeconds(60), NOW, 20));
+
+        assertThat(result.records()).singleElement().satisfies(record -> {
+            assertThat(record.traceId()).isEqualTo("5b8efff798038103d269b633813fc700");
+            assertThat(record.spanId()).isEqualTo("eee19b7ec3c1b100");
         });
         fixture.server.verify();
     }

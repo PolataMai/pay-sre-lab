@@ -185,7 +185,7 @@ public final class HttpLokiReadClient implements LokiReadClient {
         var metadata = new LinkedHashMap<String, String>();
         copyTextProperties(labels, metadata);
         if (value.size() >= 3 && value.get(2).isObject()) {
-            copyTextProperties(value.get(2), metadata);
+            copyResponseMetadata(value.get(2), metadata);
         }
         var rawMessage = value.get(1).asText();
         boolean truncated = rawMessage.length() > MAX_MESSAGE_LENGTH;
@@ -215,6 +215,16 @@ public final class HttpLokiReadClient implements LokiReadClient {
                 target.put(entry.getKey(), entry.getValue().asText());
             }
         });
+    }
+
+    private void copyResponseMetadata(JsonNode envelope, Map<String, String> target) {
+        // Loki can return metadata either as a flat object or, when label
+        // categorization is enabled, under parsed/structuredMetadata. Source
+        // structured metadata must win over query-time parsed labels.
+        copyTextProperties(envelope.path("parsed"), target);
+        copyTextProperties(envelope, target);
+        copyTextProperties(envelope.path("structured_metadata"), target);
+        copyTextProperties(envelope.path("structuredMetadata"), target);
     }
 
     private String first(Map<String, String> values, String... keys) {
