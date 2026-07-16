@@ -225,12 +225,12 @@ public record DistributedTraceQuery(
 - Test: `.../HttpLokiReadClientTest.java`
 - Test: `.../HttpTempoReadClientTest.java`
 
-- [ ] Write failing Loki tests for required selectors, escaping, nanosecond time bounds, backward order, maximum limit, native OTLP label names, and safe field projection.
-- [ ] Reject empty searches and unsupported identifiers before I/O. Never concatenate an unescaped caller string into LogQL.
-- [ ] Write failing Tempo tests for trace-ID validation, v2 endpoint construction, time bounds, resource/span normalization, parent links, error status, and 200-span truncation.
-- [ ] Project only allowlisted attributes (`payment.id`, `order.id`, `merchant.id`, `payment.channel`, HTTP route/method/status, messaging system/destination, exception type).
-- [ ] Distinguish not-found, backend-unavailable, malformed-response, and limit-exceeded errors so the gateway can audit a stable error code later.
-- [ ] Commit: `feat: add bounded log and trace evidence clients`
+- [x] Write failing Loki tests for required selectors, escaping, nanosecond time bounds, backward order, maximum limit, native OTLP label names, and safe field projection.
+- [x] Reject empty searches and unsupported identifiers before I/O. Never concatenate an unescaped caller string into LogQL.
+- [x] Write failing Tempo tests for trace-ID validation, v2 endpoint construction, time bounds, resource/span normalization, parent links, error status, and 200-span truncation.
+- [x] Project only allowlisted attributes (`payment.id`, `order.id`, `merchant.id`, `payment.channel`, HTTP route/method/status, messaging system/destination, exception type).
+- [x] Distinguish not-found, backend-unavailable, malformed-response, and limit-exceeded errors so the gateway can audit a stable error code later.
+- [x] Commit: `feat: add bounded log and trace evidence clients`
 
 ## Task 6: Expose the three read-only Agent tools
 
