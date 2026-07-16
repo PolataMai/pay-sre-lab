@@ -22,6 +22,7 @@ public final class ChannelMetrics {
         Timer.builder("channel_request_duration_seconds")
                 .description("Channel payment request duration")
                 .tag("channel", channel)
+                .publishPercentileHistogram()
                 .register(registry)
                 .record(duration);
     }

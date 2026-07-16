@@ -1,0 +1,27 @@
+groups:
+  - name: payment-slo
+    rules:
+      - alert: PaymentUnknownHigh
+        expr: payment_unknown_current{channel!=""} > 0
+        for: 5s
+        labels:
+          severity: high
+          service: payment-service
+        annotations:
+          summary: Payment unknown state is above the lab threshold
+          observedValue: '{{ $value }}'
+          threshold: "0"
+
+      - alert: ChannelTimeoutRateHigh
+        expr: |
+          sum by (channel) (rate(channel_request_total{result="TIMEOUT"}[1m]))
+            /
+          clamp_min(sum by (channel) (rate(channel_request_total[1m])), 0.001)
+            > 0.05
+        for: 15s
+        labels:
+          severity: high
+          service: channel-simulator
+        annotations:
+          summary: Channel timeout rate is above the lab threshold
+          threshold: "0.05"

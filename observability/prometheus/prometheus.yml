@@ -1,0 +1,30 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+  external_labels:
+    environment: lab
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+scrape_configs:
+  - job_name: payment-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["payment-service:8080"]
+        labels:
+          service: payment-service
+
+  - job_name: channel-simulator
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["channel-simulator:8081"]
+        labels:
+          service: channel-simulator
+
+  - job_name: sre-control-plane
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["sre-control-plane:8082"]
+        labels:
+          service: sre-control-plane

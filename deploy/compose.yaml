@@ -27,6 +27,144 @@ services:
       retries: 20
     networks: [pay-sre]
 
+  log-volume-init:
+    image: busybox:1.37.0
+    command: ["sh", "-c", "chown -R 10001:10001 /var/log/paysre && chmod 0750 /var/log/paysre"]
+    volumes:
+      - application-logs:/var/log/paysre
+    cap_drop: [ALL]
+    cap_add: [CHOWN, FOWNER, DAC_OVERRIDE]
+    restart: "no"
+    networks: [pay-sre]
+
+  prometheus:
+    image: prom/prometheus:v3.12.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=2h
+      - --web.enable-lifecycle
+    volumes:
+      - ../observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ../observability/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    healthcheck:
+      test: ["CMD", "/bin/prometheus", "--version"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 512M
+    security_opt: ["no-new-privileges:true"]
+    networks: [pay-sre]
+
+  loki:
+    image: grafana/loki:3.7.2
+    command: ["-config.file=/etc/loki/config.yaml"]
+    volumes:
+      - ../observability/loki/config.yaml:/etc/loki/config.yaml:ro
+      - loki-data:/loki
+    ports:
+      - "${LOKI_PORT:-3100}:3100"
+    healthcheck:
+      test: ["CMD", "/usr/bin/loki", "-version"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 512M
+    security_opt: ["no-new-privileges:true"]
+    networks: [pay-sre]
+
+  tempo:
+    image: grafana/tempo:2.10.5
+    command: ["-config.file=/etc/tempo/config.yaml"]
+    volumes:
+      - ../observability/tempo/config.yaml:/etc/tempo/config.yaml:ro
+      - tempo-data:/var/tempo
+    ports:
+      - "${TEMPO_PORT:-3200}:3200"
+    healthcheck:
+      test: ["CMD", "/tempo", "-version"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 512M
+    security_opt: ["no-new-privileges:true"]
+    networks: [pay-sre]
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.156.0
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    volumes:
+      - ../observability/otel-collector/config.yaml:/etc/otelcol-contrib/config.yaml:ro
+      - application-logs:/var/log/paysre:ro
+    depends_on:
+      log-volume-init:
+        condition: service_completed_successfully
+      loki:
+        condition: service_healthy
+      tempo:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/otelcol-contrib", "--version"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 384M
+    security_opt: ["no-new-privileges:true"]
+    networks: [pay-sre]
+
+  grafana:
+    image: grafana/grafana:13.1.0
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: true
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_AUTH_DISABLE_LOGIN_FORM: true
+      GF_ANALYTICS_REPORTING_ENABLED: false
+      GF_ANALYTICS_CHECK_FOR_UPDATES: false
+    volumes:
+      - ../observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      prometheus:
+        condition: service_healthy
+      loki:
+        condition: service_healthy
+      tempo:
+        condition: service_healthy
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:3000/api/health | grep -q ok"]
+      interval: 10s
+      timeout: 3s
+      retries: 20
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 384M
+    security_opt: ["no-new-privileges:true"]
+    networks: [pay-sre]
+
   channel-simulator:
     image: paysre/channel-simulator:local
     build:
@@ -37,6 +175,16 @@ services:
         JAR_FILE: payment-system/channel-simulator/target/channel-simulator-0.1.0-SNAPSHOT.jar
     environment:
       CHANNEL_SIMULATOR_PORT: 8081
+      OTEL_TRACES_EXPORT_ENABLED: true
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
+      LOGGING_FILE_NAME: /var/log/paysre/channel-simulator.json
+    volumes:
+      - application-logs:/var/log/paysre
+    depends_on:
+      log-volume-init:
+        condition: service_completed_successfully
+      otel-collector:
+        condition: service_healthy
     ports:
       - "${CHANNEL_SIMULATOR_PORT:-8081}:8081"
     healthcheck:
@@ -60,10 +208,19 @@ services:
       PAYMENT_DB_USERNAME: ${PAYMENT_DB_USERNAME:-paysre}
       PAYMENT_DB_PASSWORD: ${PAYMENT_DB_PASSWORD:-paysre}
       CHANNEL_BASE_URL: http://channel-simulator:8081
+      OTEL_TRACES_EXPORT_ENABLED: true
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
+      LOGGING_FILE_NAME: /var/log/paysre/payment-service.json
+    volumes:
+      - application-logs:/var/log/paysre
     depends_on:
       payment-db:
         condition: service_healthy
       channel-simulator:
+        condition: service_healthy
+      log-volume-init:
+        condition: service_completed_successfully
+      otel-collector:
         condition: service_healthy
     ports:
       - "${PAYMENT_SERVICE_PORT:-8080}:8080"
@@ -89,12 +246,26 @@ services:
       CONTROL_DB_PASSWORD: ${CONTROL_DB_PASSWORD:-paysre}
       PAYMENT_SERVICE_BASE_URL: http://payment-service:8080
       CHANNEL_SIMULATOR_BASE_URL: http://channel-simulator:8081
+      PROMETHEUS_BASE_URL: http://prometheus:9090
+      LOKI_BASE_URL: http://loki:3100
+      TEMPO_BASE_URL: http://tempo:3200
+      OTEL_TRACES_EXPORT_ENABLED: true
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
+      LOGGING_FILE_NAME: /var/log/paysre/sre-control-plane.json
+    volumes:
+      - application-logs:/var/log/paysre
     depends_on:
       control-db:
         condition: service_healthy
       payment-service:
         condition: service_healthy
       channel-simulator:
+        condition: service_healthy
+      log-volume-init:
+        condition: service_completed_successfully
+      otel-collector:
+        condition: service_healthy
+      prometheus:
         condition: service_healthy
     ports:
       - "${CONTROL_PLANE_PORT:-8082}:8082"
@@ -104,6 +275,13 @@ services:
       timeout: 3s
       retries: 30
     networks: [pay-sre]
+
+volumes:
+  application-logs:
+  prometheus-data:
+  loki-data:
+  tempo-data:
+  grafana-data:
 
 networks:
   pay-sre:

@@ -183,17 +183,17 @@ public record DistributedTraceQuery(
 - Modify: `deploy/env.example`
 - Test: `DeploymentConfigurationTest.java`
 
-- [ ] First make the deployment test require pinned Prometheus, Loki, Tempo, Collector Contrib, and Grafana services with health checks, resource limits, persistent data volumes, and an internal network.
-- [ ] Configure Prometheus to scrape all three services and evaluate `PaymentUnknownHigh` with low-cardinality labels.
-- [ ] Configure Collector OTLP receivers, memory limiter, batch processor, trace export to Tempo, and `filelog` JSON parsing from the shared application-log volume.
-- [ ] Enrich log records with `service.name`; exclude Collector's own file output to prevent a log loop.
-- [ ] Export logs to `http://loki:3100/otlp`; keep Loki single-tenant with structured metadata enabled.
-- [ ] Configure Tempo local block storage, OTLP receivers, safe retention, and query frontend.
-- [ ] Provision Grafana data sources with trace-to-logs and metrics-to-traces correlations.
-- [ ] Provision a payment incident dashboard showing unknown count, outcome rate, latency, channel errors, recent state-change logs, and trace links.
-- [ ] Mount a named log volume writable only by applications and read-only by Collector. Do not mount host `/var/lib/docker/containers`.
+- [x] First make the deployment test require pinned Prometheus, Loki, Tempo, Collector Contrib, and Grafana services with health checks, resource limits, persistent data volumes, and an internal network.
+- [x] Configure Prometheus to scrape all three services and evaluate `PaymentUnknownHigh` with low-cardinality labels.
+- [x] Configure Collector OTLP receivers, memory limiter, batch processor, trace export to Tempo, and `filelog` JSON parsing from the shared application-log volume.
+- [x] Enrich log records with `service.name`; exclude Collector's own file output to prevent a log loop.
+- [x] Export logs to `http://loki:3100/otlp`; keep Loki single-tenant with structured metadata enabled.
+- [x] Configure Tempo local block storage, OTLP receivers, safe retention, and query frontend.
+- [x] Provision Grafana data sources with trace-to-logs and metrics-to-traces correlations.
+- [x] Provision a payment incident dashboard showing unknown count, outcome rate, latency, channel errors, recent state-change logs, and trace links.
+- [x] Mount a named log volume writable only by applications and read-only by Collector. Do not mount host `/var/lib/docker/containers`.
 - [ ] Validate YAML/JSON syntax and run `docker compose -f deploy/compose.yaml config` on Docker-enabled CI.
-- [ ] Commit: `feat: add local observability stack`
+- [x] Commit: `feat: add local observability stack`
 
 ## Task 4: Implement the bounded Prometheus adapter
 

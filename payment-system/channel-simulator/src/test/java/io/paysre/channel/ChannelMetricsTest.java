@@ -2,6 +2,8 @@ package io.paysre.channel;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.micrometer.prometheusmetrics.PrometheusConfig;
+import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Duration;
 import org.junit.jupiter.api.Test;
@@ -29,5 +31,17 @@ class ChannelMetricsTest {
                 .flatExtracting(meter -> meter.getId().getTags())
                 .extracting(io.micrometer.core.instrument.Tag::getKey)
                 .doesNotContain("payment.id", "paymentId", "request.id", "requestId");
+    }
+
+    @Test
+    void publishesHistogramBucketsForLatencyEvidence() {
+        var registry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT);
+        var metrics = new ChannelMetrics(registry);
+
+        metrics.recordRequest("CHANNEL_A", "SUCCESS", Duration.ofMillis(125));
+
+        assertThat(registry.scrape())
+                .contains("channel_request_duration_seconds_bucket")
+                .contains("channel=\"CHANNEL_A\"");
     }
 }
