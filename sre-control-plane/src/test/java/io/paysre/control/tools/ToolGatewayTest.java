@@ -10,6 +10,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -119,6 +120,33 @@ class ToolGatewayTest {
         assertThat(audit.invocations).singleElement()
                 .satisfies(invocation -> assertThat(invocation.evidenceIds())
                         .containsExactly("EVD-1"));
+    }
+
+    @Test
+    void hashesCanonicalJsonSoPersistedContentCanBeIndependentlyVerified()
+            throws Exception {
+        var output = new LinkedHashMap<String, Object>();
+        output.put("zField", "last");
+        output.put("aField", Map.of("z", 2, "a", 1));
+        var handler = handler(
+                "read_tool",
+                Duration.ofSeconds(1),
+                65_536,
+                input -> output);
+
+        gateway(List.of(handler)).execute(
+                "INC-01", "agent-1", handler.definition().name(),
+                objectMapper.createObjectNode());
+
+        assertThat(evidence.items.values()).singleElement()
+                .satisfies(item -> {
+                    assertThat(item.content().propertyStream().map(Map.Entry::getKey))
+                            .containsExactly("aField", "zField");
+                    assertThat(item.content().path("aField").propertyStream()
+                                    .map(Map.Entry::getKey))
+                            .containsExactly("a", "z");
+                    assertThat(item.sha256()).isEqualTo(hexSha256(item.content()));
+                });
     }
 
     @Test
@@ -234,6 +262,16 @@ class ToolGatewayTest {
         return gateway(handlers, executor);
     }
 
+    private String hexSha256(com.fasterxml.jackson.databind.JsonNode content) {
+        try {
+            return java.util.HexFormat.of().formatHex(
+                    MessageDigest.getInstance("SHA-256")
+                            .digest(objectMapper.writeValueAsBytes(content)));
+        } catch (Exception exception) {
+            throw new AssertionError(exception);
+        }
+    }
+
     private ToolGateway gateway(List<ToolHandler<?, ?>> handlers, ExecutorService workerPool) {
         return new ToolGateway(
                 handlers,
@@ -304,6 +342,13 @@ class ToolGatewayTest {
         @Override
         public void record(ToolInvocation invocation) {
             invocations.add(invocation);
+        }
+
+        @Override
+        public List<ToolInvocation> findByIncidentId(String incidentId) {
+            return invocations.stream()
+                    .filter(item -> item.incidentId().equals(incidentId))
+                    .toList();
         }
     }
 }

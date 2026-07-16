@@ -13,7 +13,8 @@ RUN if [ -n "$SERVICE_MODULE" ]; then \
 
 FROM eclipse-temurin:21-jre-alpine
 
-RUN addgroup -S paysre && adduser -S paysre -G paysre
+RUN addgroup -g 10001 -S paysre && \
+    adduser -u 10001 -S paysre -G paysre
 WORKDIR /app
 COPY --from=build --chown=paysre:paysre /tmp/app.jar /app/app.jar
 

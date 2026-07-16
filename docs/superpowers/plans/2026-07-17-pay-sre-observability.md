@@ -276,20 +276,35 @@ public record DistributedTraceQuery(
 **Files:**
 
 - Modify: `ChannelTimeoutButSuccessE2ETest.java`
-- Create: `ObservabilityEvidenceE2ETest.java` or fold checks into the existing scenario test
+- Modify: `e2e-tests/pom.xml` to make the scenario target the externally managed Compose stack
+- Modify: `ToolGateway.java` to hash recursively canonicalized JSON
+- Modify: `ToolAuditRepository.java` and `JdbcToolAuditRepository.java`
+- Create: `IncidentEvidenceController.java`
+- Modify: `observability/otel-collector/config.yaml` to promote ECS trace/span IDs
+- Modify: `deploy/Dockerfile` and `deploy/Dockerfile.runtime` to pin UID/GID 10001
 - Modify: `.github/workflows/ci.yml` if additional startup time is required
 - Modify: `README.md`
 - Create: `docs/architecture/observability-evidence-plane.md`
+
+**Locked verification details:**
+
+- The Compose E2E is opt-in with `PAY_SRE_COMPOSE_E2E=true`; normal non-Docker Maven verification compiles it but skips execution.
+- CI first runs the full reactor, then starts `deploy/compose.yaml` with `--wait`, and finally runs the scenario against host ports. Teardown is unconditional and failure uploads both Surefire and Compose diagnostics.
+- Readiness polling has a 90-second total bound and requires all three facts before investigation starts: UNKNOWN Gauge at the expected value, a representative payment log with `CHANNEL_TIMEOUT` and TraceId, and a Tempo Trace for that ID.
+- ECS `trace.id` and `span.id` are promoted with Collector `trace_parser`; the trace tool is therefore seeded from the LogRecord TraceId rather than a model-generated ID.
+- Evidence JSON objects are recursively key-sorted before hashing. Arrays preserve source order. The E2E independently canonicalizes every returned content value and recomputes SHA-256.
+- The list API remains metadata-only. `GET /api/incidents/{incidentId}/evidence/{evidenceId}` exposes safe normalized content only after Incident ownership validation; `GET /api/incidents/{incidentId}/tool-audits` exposes the complete read-only invocation chain.
+- Runtime containers and the log-volume initializer share UID/GID 10001 so ECS file logging remains non-root and writable.
 
 - [ ] Start the full Compose stack in CI and wait for readiness of Prometheus, Loki, Tempo, Collector, Grafana, and application services.
 - [ ] Run the seeded timeout-but-success traffic and wait with bounded polling for metric, log, and trace ingestion.
 - [ ] Assert the three tool Evidence types exist, the trace includes payment and channel spans, logs include the UNKNOWN transition, and metrics show the unknown count without payment IDs as labels.
 - [ ] Assert each Evidence hash matches its canonical persisted content and every tool call has an audit record.
 - [ ] Assert the final root cause, affected payment count/amount, Runbook, and human-review flag still pass the scenario evaluator.
-- [ ] Document `docker compose up --build`, the scenario command, Grafana URL, tool request examples, architecture, limitations, and troubleshooting.
-- [ ] Run local non-Docker verification: `mvn -B -ntp clean verify -Djava.version=18`.
+- [x] Document `docker compose up --build`, the scenario command, Grafana URL, tool request examples, architecture, limitations, and troubleshooting.
+- [x] Run local non-Docker verification: `mvn -B -ntp clean verify -Djava.version=18`.
 - [ ] Run authoritative CI verification on Java 21 with Docker; retain test reports on failure.
-- [ ] Commit: `test: prove observability evidence scenario`
+- [x] Commit: `test: prove observability evidence scenario`
 
 ## 5. Acceptance Criteria
 

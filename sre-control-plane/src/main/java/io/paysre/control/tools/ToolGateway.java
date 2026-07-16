@@ -119,7 +119,7 @@ public final class ToolGateway {
                     started);
         }
 
-        JsonNode content = objectMapper.valueToTree(output);
+        JsonNode content = canonicalize(objectMapper.valueToTree(output));
         byte[] serialized;
         try {
             serialized = objectMapper.writeValueAsBytes(content);
@@ -260,5 +260,22 @@ public final class ToolGateway {
         } catch (NoSuchAlgorithmException exception) {
             throw new IllegalStateException("SHA-256 must be available", exception);
         }
+    }
+
+    private JsonNode canonicalize(JsonNode node) {
+        if (node.isObject()) {
+            var canonical = objectMapper.createObjectNode();
+            node.propertyStream()
+                    .sorted(Map.Entry.comparingByKey())
+                    .forEach(entry -> canonical.set(
+                            entry.getKey(), canonicalize(entry.getValue())));
+            return canonical;
+        }
+        if (node.isArray()) {
+            var canonical = objectMapper.createArrayNode();
+            node.forEach(item -> canonical.add(canonicalize(item)));
+            return canonical;
+        }
+        return node.deepCopy();
     }
 }

@@ -561,6 +561,13 @@ class InvestigationOrchestratorTest {
         public void record(ToolInvocation invocation) {
             invocations.add(invocation);
         }
+
+        @Override
+        public List<ToolInvocation> findByIncidentId(String incidentId) {
+            return invocations.stream()
+                    .filter(item -> item.incidentId().equals(incidentId))
+                    .toList();
+        }
     }
 
     private static final class SequenceClock extends Clock {
