@@ -207,12 +207,12 @@ public record DistributedTraceQuery(
 - Create: `.../HttpPrometheusReadClient.java`
 - Test: `.../HttpPrometheusReadClientTest.java`
 
-- [ ] Write failing HTTP tests proving enum-to-PromQL mapping, URL encoding, exact start/end/step values, response normalization, warning preservation, and non-2xx/invalid JSON handling.
-- [ ] Validate service/channel against fixed allowlists; reject future ranges, inverted ranges, ranges over two hours, steps below 15 seconds, and excessive sample counts before I/O.
-- [ ] Add a backend `limit=20` and enforce 20 series/240 samples locally even if the backend ignores it.
-- [ ] Treat NaN and infinity as explicit unavailable samples, not zero.
-- [ ] Return an immutable normalized result with `truncated` and warnings.
-- [ ] Commit: `feat: add bounded prometheus evidence client`
+- [x] Write failing HTTP tests proving enum-to-PromQL mapping, URL encoding, exact start/end/step values, response normalization, warning preservation, and non-2xx/invalid JSON handling.
+- [x] Validate service/channel against fixed allowlists; reject future ranges, inverted ranges, ranges over two hours, steps below 15 seconds, and excessive sample counts before I/O.
+- [x] Add a backend `limit=20` and enforce 20 series/240 samples locally even if the backend ignores it.
+- [x] Treat NaN and infinity as explicit unavailable samples, not zero.
+- [x] Return an immutable normalized result with `truncated` and warnings.
+- [x] Commit: `feat: add bounded prometheus evidence client`
 
 ## Task 5: Implement bounded Loki and Tempo adapters
 
