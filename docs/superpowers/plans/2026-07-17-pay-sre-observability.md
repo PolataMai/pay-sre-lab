@@ -245,13 +245,13 @@ public record DistributedTraceQuery(
 - Test: `ObservabilityToolsTest.java`
 - Test: `ToolGatewayTest.java`
 
-- [ ] Write failing handler tests for definitions, input validation, normalized outputs, and backend error propagation.
-- [ ] Register three typed clients and handlers with 3-second backend read timeouts and the existing bounded tool executor.
-- [ ] Add explicit Evidence mappings: `SERVICE_METRICS`, `STRUCTURED_LOGS`, and `DISTRIBUTED_TRACE`.
-- [ ] Preserve the existing SHA-256, incident ownership, 64 KiB ceiling, timeout, capacity rejection, and complete audit behavior.
-- [ ] Map typed backend failures to stable audit codes without leaking backend response bodies.
-- [ ] Verify no HTTP mutation method exists in any observability client.
-- [ ] Commit: `feat: expose observability evidence tools`
+- [x] Write failing handler tests for definitions, input validation, normalized outputs, and backend error propagation.
+- [x] Register three typed clients and handlers with 3-second backend read timeouts and the existing bounded tool executor.
+- [x] Add explicit Evidence mappings: `SERVICE_METRICS`, `STRUCTURED_LOGS`, and `DISTRIBUTED_TRACE`.
+- [x] Preserve the existing SHA-256, incident ownership, 64 KiB ceiling, timeout, capacity rejection, and complete audit behavior.
+- [x] Map typed backend failures to stable audit codes without leaking backend response bodies.
+- [x] Verify no HTTP mutation method exists in any observability client.
+- [x] Commit: `feat: expose observability evidence tools`
 
 ## Task 7: Make the deterministic investigation use telemetry evidence
 

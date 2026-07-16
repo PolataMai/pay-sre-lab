@@ -70,7 +70,10 @@ class ControlPlaneApplicationTest {
                 .containsExactlyInAnyOrder(
                         "get_payment_timeline",
                         "query_channel_final_state",
-                        "calculate_incident_impact");
+                        "calculate_incident_impact",
+                        "query_service_metrics",
+                        "search_structured_logs",
+                        "get_distributed_trace");
     }
 
     @Test

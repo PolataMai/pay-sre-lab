@@ -13,6 +13,13 @@ paysre:
     base-url: ${PAYMENT_SERVICE_BASE_URL:http://localhost:8080}
   channel:
     base-url: ${CHANNEL_SIMULATOR_BASE_URL:http://localhost:8081}
+  observability:
+    prometheus:
+      base-url: ${PROMETHEUS_BASE_URL:http://localhost:9090}
+    loki:
+      base-url: ${LOKI_BASE_URL:http://localhost:3100}
+    tempo:
+      base-url: ${TEMPO_BASE_URL:http://localhost:3200}
   investigation:
     model-timeout: ${INVESTIGATION_MODEL_TIMEOUT:PT10S}
 

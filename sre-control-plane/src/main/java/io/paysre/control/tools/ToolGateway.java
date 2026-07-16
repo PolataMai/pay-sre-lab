@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.paysre.control.evidence.Evidence;
 import io.paysre.control.evidence.EvidenceRepository;
+import io.paysre.control.observability.ObservabilityBackendException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
@@ -114,7 +115,7 @@ public final class ToolGateway {
                     agentId,
                     toolName,
                     handler.definition().version(),
-                    "TOOL_EXECUTION_FAILED",
+                    executionErrorCode(exception.getCause()),
                     started);
         }
 
@@ -235,8 +236,21 @@ public final class ToolGateway {
             case "get_payment_timeline" -> "PAYMENT_TIMELINE";
             case "query_channel_final_state" -> "CHANNEL_FINAL_STATE";
             case "calculate_incident_impact" -> "INCIDENT_IMPACT";
+            case "query_service_metrics" -> "SERVICE_METRICS";
+            case "search_structured_logs" -> "STRUCTURED_LOGS";
+            case "get_distributed_trace" -> "DISTRIBUTED_TRACE";
             default -> toolName.toUpperCase(java.util.Locale.ROOT);
         };
+    }
+
+    private String executionErrorCode(Throwable cause) {
+        if (cause instanceof ObservabilityBackendException observabilityFailure) {
+            return "OBSERVABILITY_" + observabilityFailure.code().name();
+        }
+        if (cause instanceof IllegalArgumentException) {
+            return "INVALID_ARGUMENTS";
+        }
+        return "TOOL_EXECUTION_FAILED";
     }
 
     private String sha256(byte[] content) {

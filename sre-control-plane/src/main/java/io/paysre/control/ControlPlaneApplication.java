@@ -11,13 +11,22 @@ import io.paysre.control.investigation.InvestigationConclusionRepository;
 import io.paysre.control.investigation.InvestigationModel;
 import io.paysre.control.investigation.InvestigationOrchestrator;
 import io.paysre.control.investigation.StubInvestigationModel;
+import io.paysre.control.observability.HttpLokiReadClient;
+import io.paysre.control.observability.HttpPrometheusReadClient;
+import io.paysre.control.observability.HttpTempoReadClient;
+import io.paysre.control.observability.LokiReadClient;
+import io.paysre.control.observability.PrometheusReadClient;
+import io.paysre.control.observability.TempoReadClient;
 import io.paysre.control.tools.CalculateIncidentImpactTool;
 import io.paysre.control.tools.ChannelReadClient;
+import io.paysre.control.tools.GetDistributedTraceTool;
 import io.paysre.control.tools.GetPaymentTimelineTool;
 import io.paysre.control.tools.HttpChannelReadClient;
 import io.paysre.control.tools.HttpPaymentReadClient;
 import io.paysre.control.tools.PaymentReadClient;
+import io.paysre.control.tools.QueryServiceMetricsTool;
 import io.paysre.control.tools.QueryChannelFinalStateTool;
+import io.paysre.control.tools.SearchStructuredLogsTool;
 import io.paysre.control.tools.ToolAuditRepository;
 import io.paysre.control.tools.ToolGateway;
 import io.paysre.control.tools.ToolHandler;
@@ -85,6 +94,36 @@ public class ControlPlaneApplication {
     }
 
     @Bean
+    PrometheusReadClient prometheusReadClient(
+            @Value("${paysre.observability.prometheus.base-url}") String baseUrl,
+            RestClient.Builder restClientBuilder,
+            ObjectMapper objectMapper,
+            Clock clock) {
+        return new HttpPrometheusReadClient(
+                readOnlyRestClient(restClientBuilder, baseUrl), objectMapper, clock);
+    }
+
+    @Bean
+    LokiReadClient lokiReadClient(
+            @Value("${paysre.observability.loki.base-url}") String baseUrl,
+            RestClient.Builder restClientBuilder,
+            ObjectMapper objectMapper,
+            Clock clock) {
+        return new HttpLokiReadClient(
+                readOnlyRestClient(restClientBuilder, baseUrl), objectMapper, clock);
+    }
+
+    @Bean
+    TempoReadClient tempoReadClient(
+            @Value("${paysre.observability.tempo.base-url}") String baseUrl,
+            RestClient.Builder restClientBuilder,
+            ObjectMapper objectMapper,
+            Clock clock) {
+        return new HttpTempoReadClient(
+                readOnlyRestClient(restClientBuilder, baseUrl), objectMapper, clock);
+    }
+
+    @Bean
     GetPaymentTimelineTool getPaymentTimelineTool(PaymentReadClient client) {
         return new GetPaymentTimelineTool(client);
     }
@@ -97,6 +136,21 @@ public class ControlPlaneApplication {
     @Bean
     CalculateIncidentImpactTool calculateIncidentImpactTool(PaymentReadClient client) {
         return new CalculateIncidentImpactTool(client);
+    }
+
+    @Bean
+    QueryServiceMetricsTool queryServiceMetricsTool(PrometheusReadClient client) {
+        return new QueryServiceMetricsTool(client);
+    }
+
+    @Bean
+    SearchStructuredLogsTool searchStructuredLogsTool(LokiReadClient client) {
+        return new SearchStructuredLogsTool(client);
+    }
+
+    @Bean
+    GetDistributedTraceTool getDistributedTraceTool(TempoReadClient client) {
+        return new GetDistributedTraceTool(client);
     }
 
     @Bean(destroyMethod = "shutdown")

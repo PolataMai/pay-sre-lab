@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.paysre.control.evidence.Evidence;
 import io.paysre.control.evidence.EvidenceRepository;
+import io.paysre.control.observability.ObservabilityBackendException;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -157,6 +158,76 @@ class ToolGatewayTest {
             release.countDown();
             saturated.shutdownNow();
         }
+    }
+
+    @Test
+    void mapsObservabilityFailuresToStableAuditedCodesWithoutLeakingDetails() {
+        var handler = handler(
+                "query_service_metrics",
+                Duration.ofSeconds(1),
+                1_024,
+                input -> {
+                    throw new ObservabilityBackendException(
+                            ObservabilityBackendException.Code.BACKEND_UNAVAILABLE,
+                            "private backend response");
+                });
+
+        var result = gateway(List.of(handler)).execute(
+                "INC-01",
+                "agent-1",
+                "query_service_metrics",
+                objectMapper.createObjectNode());
+
+        assertThat(result.successful()).isFalse();
+        assertThat(result.errorCode()).isEqualTo("OBSERVABILITY_BACKEND_UNAVAILABLE");
+        assertThat(result.toString()).doesNotContain("private backend response");
+        assertThat(audit.invocations).singleElement()
+                .satisfies(invocation -> assertThat(invocation.errorCode())
+                        .isEqualTo("OBSERVABILITY_BACKEND_UNAVAILABLE"));
+    }
+
+    @Test
+    void mapsHandlerValidationFailuresToInvalidArguments() {
+        var handler = handler(
+                "search_structured_logs",
+                Duration.ofSeconds(1),
+                1_024,
+                input -> {
+                    throw new IllegalArgumentException("unsafe caller detail");
+                });
+
+        var result = gateway(List.of(handler)).execute(
+                "INC-01",
+                "agent-1",
+                "search_structured_logs",
+                objectMapper.createObjectNode());
+
+        assertThat(result.successful()).isFalse();
+        assertThat(result.errorCode()).isEqualTo("INVALID_ARGUMENTS");
+        assertThat(result.toString()).doesNotContain("unsafe caller detail");
+    }
+
+    @Test
+    void assignsExplicitEvidenceTypesToObservabilityTools() {
+        var handlers = List.of(
+                handler("query_service_metrics", Duration.ofSeconds(1), 1_024,
+                        input -> Map.of("signal", "PAYMENT_UNKNOWN_CURRENT")),
+                handler("search_structured_logs", Duration.ofSeconds(1), 1_024,
+                        input -> Map.of("records", List.of())),
+                handler("get_distributed_trace", Duration.ofSeconds(1), 1_024,
+                        input -> Map.of("traceId", "5b8efff798038103d269b633813fc700")));
+        var gateway = gateway(List.copyOf(handlers));
+
+        handlers.forEach(handler -> gateway.execute(
+                "INC-01",
+                "agent-1",
+                handler.definition().name(),
+                objectMapper.createObjectNode()));
+
+        assertThat(evidence.items.values())
+                .extracting(Evidence::evidenceType)
+                .containsExactlyInAnyOrder(
+                        "SERVICE_METRICS", "STRUCTURED_LOGS", "DISTRIBUTED_TRACE");
     }
 
     private ToolGateway gateway(List<ToolHandler<?, ?>> handlers) {
