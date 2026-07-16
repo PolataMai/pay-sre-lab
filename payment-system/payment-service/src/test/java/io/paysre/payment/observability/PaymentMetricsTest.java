@@ -21,7 +21,10 @@ class PaymentMetricsTest {
                         .counter()
                         .count())
                 .isEqualTo(1.0);
-        assertThat(registry.get("payment_unknown_current").gauge().value())
+        assertThat(registry.get("payment_unknown_current")
+                        .tag("channel", "CHANNEL_A")
+                        .gauge()
+                        .value())
                 .isEqualTo(1.0);
         assertThat(registry.getMeters())
                 .flatExtracting(meter -> meter.getId().getTags())
@@ -38,7 +41,10 @@ class PaymentMetricsTest {
         metrics.recordTransition(
                 "CHANNEL_A", PaymentStatus.UNKNOWN, PaymentStatus.SUCCESS);
 
-        assertThat(registry.get("payment_unknown_current").gauge().value())
+        assertThat(registry.get("payment_unknown_current")
+                        .tag("channel", "CHANNEL_A")
+                        .gauge()
+                        .value())
                 .isZero();
     }
 }
