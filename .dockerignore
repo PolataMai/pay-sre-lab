@@ -1,0 +1,9 @@
+.git
+.worktrees
+.idea
+.vscode
+work
+**/target
+*.log
+.env
+deploy/.env

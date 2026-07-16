@@ -13,11 +13,17 @@ paysre:
     base-url: ${PAYMENT_SERVICE_BASE_URL:http://localhost:8080}
   channel:
     base-url: ${CHANNEL_SIMULATOR_BASE_URL:http://localhost:8081}
+  investigation:
+    model-timeout: ${INVESTIGATION_MODEL_TIMEOUT:PT10S}
 
 server:
   port: ${CONTROL_PLANE_PORT:8082}
 
 management:
+  endpoint:
+    health:
+      probes:
+        enabled: true
   endpoints:
     web:
       exposure:

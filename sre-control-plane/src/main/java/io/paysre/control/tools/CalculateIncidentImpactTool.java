@@ -35,7 +35,12 @@ public final class CalculateIncidentImpactTool
 
     @Override
     public Output execute(Input input) {
-        var payments = paymentClient.unknownPayments(input.from(), input.to(), 200).stream()
+        var candidates = paymentClient.unknownPayments(input.from(), input.to(), 200);
+        if (candidates.size() == 200) {
+            throw new IllegalStateException(
+                    "impact candidate limit reached; exact total is unknown");
+        }
+        var payments = candidates.stream()
                 .filter(payment -> input.channel().equals(payment.channel()))
                 .toList();
         var currencies = payments.stream()

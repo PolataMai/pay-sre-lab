@@ -9,6 +9,11 @@ import java.time.Clock;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Objects;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 public final class InvestigationOrchestrator {
 
@@ -24,6 +29,8 @@ public final class InvestigationOrchestrator {
     private final ToolGateway toolGateway;
     private final ConclusionValidator validator;
     private final Clock clock;
+    private final ExecutorService modelExecutor;
+    private final Duration modelTimeout;
 
     public InvestigationOrchestrator(
             IncidentRepository incidentRepository,
@@ -32,7 +39,9 @@ public final class InvestigationOrchestrator {
             InvestigationModel model,
             ToolGateway toolGateway,
             ConclusionValidator validator,
-            Clock clock) {
+            Clock clock,
+            ExecutorService modelExecutor,
+            Duration modelTimeout) {
         this.incidentRepository = Objects.requireNonNull(incidentRepository, "incidentRepository");
         this.evidenceRepository = Objects.requireNonNull(evidenceRepository, "evidenceRepository");
         this.conclusionRepository = Objects.requireNonNull(conclusionRepository, "conclusionRepository");
@@ -40,6 +49,11 @@ public final class InvestigationOrchestrator {
         this.toolGateway = Objects.requireNonNull(toolGateway, "toolGateway");
         this.validator = Objects.requireNonNull(validator, "validator");
         this.clock = Objects.requireNonNull(clock, "clock");
+        this.modelExecutor = Objects.requireNonNull(modelExecutor, "modelExecutor");
+        this.modelTimeout = Objects.requireNonNull(modelTimeout, "modelTimeout");
+        if (modelTimeout.isZero() || modelTimeout.isNegative()) {
+            throw new IllegalArgumentException("model timeout must be positive");
+        }
     }
 
     public InvestigationConclusion investigate(String incidentId, InvestigationSeed seed) {
@@ -72,9 +86,12 @@ public final class InvestigationOrchestrator {
                     lastValidationError);
             InvestigationDecision decision;
             try {
-                decision = model.decide(context);
-            } catch (RuntimeException exception) {
+                decision = decideWithOneTimeoutRetry(context);
+            } catch (ModelDecisionException exception) {
                 return escalate(incident, "investigation model failed: " + exception.getMessage());
+            }
+            if (decision == null) {
+                return escalate(incident, "investigation model returned no structured decision");
             }
 
             if (decision instanceof InvestigationDecision.CallTool callTool) {
@@ -117,9 +134,48 @@ public final class InvestigationOrchestrator {
         return escalate(incident, "investigation exceeded the 12 tool call limit");
     }
 
+    private InvestigationDecision decideWithOneTimeoutRetry(InvestigationContext context) {
+        for (int attempt = 1; attempt <= 2; attempt++) {
+            java.util.concurrent.Future<InvestigationDecision> future;
+            try {
+                future = modelExecutor.submit(() -> model.decide(context));
+            } catch (RejectedExecutionException exception) {
+                throw new ModelDecisionException("decision capacity is exhausted", exception);
+            }
+            try {
+                return future.get(modelTimeout.toNanos(), TimeUnit.NANOSECONDS);
+            } catch (TimeoutException exception) {
+                future.cancel(true);
+                if (attempt == 2) {
+                    throw new ModelDecisionException("decision timed out twice", exception);
+                }
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                future.cancel(true);
+                throw new ModelDecisionException("decision was interrupted", exception);
+            } catch (ExecutionException exception) {
+                throw new ModelDecisionException(
+                        "decision execution failed: " + rootMessage(exception), exception);
+            }
+        }
+        throw new IllegalStateException("unreachable model retry state");
+    }
+
+    private String rootMessage(ExecutionException exception) {
+        return exception.getCause() == null
+                ? exception.getMessage()
+                : exception.getCause().getMessage();
+    }
+
     private InvestigationConclusion escalate(Incident incident, String reason) {
         incident.markNeedsHuman(clock.instant());
         incidentRepository.save(incident);
         throw new InvestigationEscalatedException(reason);
+    }
+
+    private static final class ModelDecisionException extends RuntimeException {
+        private ModelDecisionException(String message, Throwable cause) {
+            super(message, cause);
+        }
     }
 }

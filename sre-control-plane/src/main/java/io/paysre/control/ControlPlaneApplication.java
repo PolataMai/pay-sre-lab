@@ -31,6 +31,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
@@ -116,7 +117,7 @@ public class ControlPlaneApplication {
     ToolGateway toolGateway(
             List<ToolHandler<?, ?>> handlers,
             ObjectMapper objectMapper,
-            ExecutorService toolExecutor,
+            @Qualifier("toolExecutor") ExecutorService toolExecutor,
             EvidenceRepository evidenceRepository,
             ToolAuditRepository auditRepository,
             Clock clock) {
@@ -128,6 +129,24 @@ public class ControlPlaneApplication {
                 auditRepository,
                 clock,
                 () -> "EVD-" + UUID.randomUUID().toString().replace("-", ""));
+    }
+
+    @Bean(destroyMethod = "shutdown")
+    ExecutorService modelExecutor() {
+        var sequence = new AtomicInteger();
+        return new ThreadPoolExecutor(
+                1,
+                2,
+                60,
+                TimeUnit.SECONDS,
+                new ArrayBlockingQueue<>(8),
+                runnable -> {
+                    var thread = new Thread(
+                            runnable, "paysre-model-" + sequence.incrementAndGet());
+                    thread.setDaemon(true);
+                    return thread;
+                },
+                new ThreadPoolExecutor.AbortPolicy());
     }
 
     @Bean
@@ -148,7 +167,9 @@ public class ControlPlaneApplication {
             InvestigationModel investigationModel,
             ToolGateway toolGateway,
             ConclusionValidator validator,
-            Clock clock) {
+            Clock clock,
+            @Qualifier("modelExecutor") ExecutorService modelExecutor,
+            @Value("${paysre.investigation.model-timeout}") Duration modelTimeout) {
         return new InvestigationOrchestrator(
                 incidentRepository,
                 evidenceRepository,
@@ -156,7 +177,9 @@ public class ControlPlaneApplication {
                 investigationModel,
                 toolGateway,
                 validator,
-                clock);
+                clock,
+                modelExecutor,
+                modelTimeout);
     }
 
     private RestClient readOnlyRestClient(String baseUrl) {

@@ -28,6 +28,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -202,6 +203,47 @@ class InvestigationOrchestratorTest {
                 .isEqualTo(IncidentStatus.NEEDS_HUMAN);
     }
 
+    @Test
+    void escalatesWhenTheModelReturnsNoStructuredDecision() {
+        InvestigationModel emptyModel = context -> null;
+
+        assertThatThrownBy(() -> orchestrator(emptyModel, gateway(List.of()))
+                .investigate(INCIDENT_ID, seed()))
+                .isInstanceOf(InvestigationEscalatedException.class)
+                .hasMessageContaining("no structured decision");
+
+        assertThat(incidents.findById(INCIDENT_ID).orElseThrow().status())
+                .isEqualTo(IncidentStatus.NEEDS_HUMAN);
+    }
+
+    @Test
+    void retriesOneTimedOutModelDecisionThenEscalates() {
+        var attempts = new AtomicInteger();
+        InvestigationModel blockedModel = context -> {
+            attempts.incrementAndGet();
+            try {
+                new CountDownLatch(1).await();
+                return new InvestigationDecision.Escalate("unreachable");
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("interrupted", exception);
+            }
+        };
+
+        assertThatThrownBy(() -> orchestrator(
+                        blockedModel,
+                        gateway(List.of()),
+                        Clock.fixed(NOW, ZoneOffset.UTC),
+                        Duration.ofMillis(20))
+                .investigate(INCIDENT_ID, seed()))
+                .isInstanceOf(InvestigationEscalatedException.class)
+                .hasMessageContaining("timed out twice");
+
+        assertThat(attempts).hasValue(2);
+        assertThat(incidents.findById(INCIDENT_ID).orElseThrow().status())
+                .isEqualTo(IncidentStatus.NEEDS_HUMAN);
+    }
+
     private InvestigationOrchestrator orchestrator(
             InvestigationModel model, ToolGateway gateway) {
         return orchestrator(model, gateway, Clock.fixed(NOW, ZoneOffset.UTC));
@@ -209,6 +251,14 @@ class InvestigationOrchestratorTest {
 
     private InvestigationOrchestrator orchestrator(
             InvestigationModel model, ToolGateway gateway, Clock clock) {
+        return orchestrator(model, gateway, clock, Duration.ofSeconds(1));
+    }
+
+    private InvestigationOrchestrator orchestrator(
+            InvestigationModel model,
+            ToolGateway gateway,
+            Clock clock,
+            Duration modelTimeout) {
         return new InvestigationOrchestrator(
                 incidents,
                 evidence,
@@ -216,7 +266,9 @@ class InvestigationOrchestratorTest {
                 model,
                 gateway,
                 new ConclusionValidator(evidence),
-                clock);
+                clock,
+                executor,
+                modelTimeout);
     }
 
     private ToolGateway gateway(List<ToolHandler<?, ?>> handlers) {

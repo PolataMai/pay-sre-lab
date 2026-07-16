@@ -1,0 +1,110 @@
+name: pay-sre-lab
+
+services:
+  payment-db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: paysre
+      POSTGRES_USER: ${PAYMENT_DB_USERNAME:-paysre}
+      POSTGRES_PASSWORD: ${PAYMENT_DB_PASSWORD:-paysre}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [pay-sre]
+
+  control-db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: paysre
+      POSTGRES_USER: ${CONTROL_DB_USERNAME:-paysre}
+      POSTGRES_PASSWORD: ${CONTROL_DB_PASSWORD:-paysre}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [pay-sre]
+
+  channel-simulator:
+    image: paysre/channel-simulator:local
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        SERVICE_MODULE: payment-system/channel-simulator
+        JAR_FILE: payment-system/channel-simulator/target/channel-simulator-0.1.0-SNAPSHOT.jar
+    environment:
+      CHANNEL_SIMULATOR_PORT: 8081
+    ports:
+      - "${CHANNEL_SIMULATOR_PORT:-8081}:8081"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8081/actuator/health/readiness"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    networks: [pay-sre]
+
+  payment-service:
+    image: paysre/payment-service:local
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        SERVICE_MODULE: payment-system/payment-service
+        JAR_FILE: payment-system/payment-service/target/payment-service-0.1.0-SNAPSHOT.jar
+    environment:
+      PAYMENT_SERVICE_PORT: 8080
+      PAYMENT_DB_URL: jdbc:postgresql://payment-db:5432/paysre
+      PAYMENT_DB_USERNAME: ${PAYMENT_DB_USERNAME:-paysre}
+      PAYMENT_DB_PASSWORD: ${PAYMENT_DB_PASSWORD:-paysre}
+      CHANNEL_BASE_URL: http://channel-simulator:8081
+    depends_on:
+      payment-db:
+        condition: service_healthy
+      channel-simulator:
+        condition: service_healthy
+    ports:
+      - "${PAYMENT_SERVICE_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8080/actuator/health/readiness"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    networks: [pay-sre]
+
+  sre-control-plane:
+    image: paysre/sre-control-plane:local
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        SERVICE_MODULE: sre-control-plane
+        JAR_FILE: sre-control-plane/target/sre-control-plane-0.1.0-SNAPSHOT.jar
+    environment:
+      CONTROL_PLANE_PORT: 8082
+      CONTROL_DB_URL: jdbc:postgresql://control-db:5432/paysre
+      CONTROL_DB_USERNAME: ${CONTROL_DB_USERNAME:-paysre}
+      CONTROL_DB_PASSWORD: ${CONTROL_DB_PASSWORD:-paysre}
+      PAYMENT_SERVICE_BASE_URL: http://payment-service:8080
+      CHANNEL_SIMULATOR_BASE_URL: http://channel-simulator:8081
+    depends_on:
+      control-db:
+        condition: service_healthy
+      payment-service:
+        condition: service_healthy
+      channel-simulator:
+        condition: service_healthy
+    ports:
+      - "${CONTROL_PLANE_PORT:-8082}:8082"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8082/actuator/health/readiness"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    networks: [pay-sre]
+
+networks:
+  pay-sre:
+    name: pay-sre

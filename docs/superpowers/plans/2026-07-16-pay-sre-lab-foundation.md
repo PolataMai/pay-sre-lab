@@ -22,6 +22,20 @@
 - Spring Boot is pinned to `4.1.0`; Spring AI is pinned through BOM `2.0.0`.
 - Before Task 1 execution, run `git init`, create branch `feat/pay-sre-foundation`, and add a Java/Maven/IDE `.gitignore`; the current workspace is not yet a Git repository.
 
+## Execution Status (2026-07-17)
+
+The checklists below are intentionally preserved as the reproducible TDD runbook. Current implementation status is:
+
+| Scope | Status | Evidence |
+|---|---|---|
+| Tasks 1–4: contracts, channel fault, payment UNKNOWN, telemetry | Complete | Focused commits `98163d7` through `7bacf14`; unit and Spring context tests pass. |
+| Task 5: alert ingestion and Incident persistence | Complete | Commit `4f61a6a`; five-minute aggregation and Flyway schema tests pass. |
+| Task 6: read-only tools, Evidence and audit | Complete | Commit `531b851`; timeout, capacity, size, hash and JDBC tests pass. |
+| Task 7: bounded investigation and conclusion validation | Complete | Commit `fc4bb26`; evidence, impact, deadline, retry, idempotency and escalation tests pass. |
+| Task 8: Ground Truth, evaluator, container test, Compose and README | Implemented; Docker execution pending | Clean reactor verification passes locally; two Docker-backed tests are explicitly skipped because this workstation has no Docker Engine. GitHub Actions is configured to run the same build on Java 21 with Docker. |
+
+Local verification used `mvn -B -ntp clean verify -Djava.version=18` because the workstation only provides JDK 18. The committed build baseline remains Java 21, and CI is the authoritative Java 21 plus Testcontainers gate. Do not mark the final Docker demonstration checks complete until that CI job or a Docker-enabled workstation has executed them.
+
 ---
 
 ## Scope Decomposition
@@ -1256,19 +1270,21 @@ The test starts PostgreSQL and the three applications through Testcontainers, in
 public record ScenarioScore(
         boolean rootCauseCorrect,
         BigDecimal evidenceRecall,
+        boolean minimumEvidenceCountMet,
         boolean runbookCorrect,
         boolean humanReviewCorrect) {
 
     public boolean passed() {
         return rootCauseCorrect
                 && evidenceRecall.compareTo(BigDecimal.ONE) == 0
+                && minimumEvidenceCountMet
                 && runbookCorrect
                 && humanReviewCorrect;
     }
 }
 ```
 
-Evidence recall equals matched required evidence types divided by total required evidence types, using scale four and `HALF_UP` rounding.
+Evidence recall equals matched required evidence types divided by total required evidence types, using scale four and `HALF_UP` rounding. `minimumEvidenceCountMet` independently enforces `expected.minimumEvidenceCount`; matching every type is insufficient when the scenario requires additional corroborating items.
 
 - [ ] **Step 4: Add local Compose services**
 

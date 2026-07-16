@@ -1,0 +1,16 @@
+spring:
+  application:
+    name: channel-simulator
+
+server:
+  port: ${CHANNEL_SIMULATOR_PORT:8081}
+
+management:
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  endpoints:
+    web:
+      exposure:
+        include: health,info

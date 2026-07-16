@@ -1,5 +1,9 @@
 package io.paysre.control.investigation;
 
+import io.paysre.control.evidence.Evidence;
+import io.paysre.control.evidence.EvidenceRepository;
+import java.time.Instant;
+import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -16,12 +20,15 @@ public final class InvestigationController {
 
     private final InvestigationOrchestrator orchestrator;
     private final InvestigationConclusionRepository repository;
+    private final EvidenceRepository evidenceRepository;
 
     public InvestigationController(
             InvestigationOrchestrator orchestrator,
-            InvestigationConclusionRepository repository) {
+            InvestigationConclusionRepository repository,
+            EvidenceRepository evidenceRepository) {
         this.orchestrator = orchestrator;
         this.repository = repository;
+        this.evidenceRepository = evidenceRepository;
     }
 
     @PostMapping("/investigations")
@@ -37,10 +44,17 @@ public final class InvestigationController {
                 .orElseThrow(() -> new ConclusionNotFoundException(incidentId));
     }
 
+    @GetMapping("/evidence")
+    public List<EvidenceView> getEvidence(@PathVariable String incidentId) {
+        return evidenceRepository.findByIncidentId(incidentId).stream()
+                .map(EvidenceView::from)
+                .toList();
+    }
+
     @ExceptionHandler(InvestigationEscalatedException.class)
     ProblemDetail escalated(InvestigationEscalatedException exception) {
         var detail = ProblemDetail.forStatusAndDetail(
-                HttpStatus.UNPROCESSABLE_ENTITY, exception.getMessage());
+                HttpStatus.UNPROCESSABLE_CONTENT, exception.getMessage());
         detail.setProperty("code", "INVESTIGATION_NEEDS_HUMAN");
         return detail;
     }
@@ -64,6 +78,25 @@ public final class InvestigationController {
     private static final class ConclusionNotFoundException extends RuntimeException {
         private ConclusionNotFoundException(String incidentId) {
             super("investigation conclusion not found: " + incidentId);
+        }
+    }
+
+    public record EvidenceView(
+            String evidenceId,
+            String evidenceType,
+            String sourceTool,
+            int sourceToolVersion,
+            String sha256,
+            Instant collectedAt) {
+
+        private static EvidenceView from(Evidence evidence) {
+            return new EvidenceView(
+                    evidence.evidenceId(),
+                    evidence.evidenceType(),
+                    evidence.sourceTool(),
+                    evidence.sourceToolVersion(),
+                    evidence.sha256(),
+                    evidence.collectedAt());
         }
     }
 }

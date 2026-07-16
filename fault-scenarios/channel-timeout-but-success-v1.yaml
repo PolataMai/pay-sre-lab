@@ -1,0 +1,20 @@
+id: channel-timeout-but-success-v1
+seed: 20260716
+fault:
+  channel: CHANNEL_A
+  type: TIMEOUT_BUT_SUCCESS
+  probability: 1.00
+  activeFor: PT2M
+traffic:
+  payments: 5
+  amount: "10.00"
+  currency: CNY
+expected:
+  rootCause: CHANNEL_TIMEOUT_RESPONSE_LOST
+  minimumEvidenceCount: 3
+  requiredEvidenceTypes:
+    - PAYMENT_TIMELINE
+    - CHANNEL_FINAL_STATE
+    - INCIDENT_IMPACT
+  recommendedRunbook: query-and-sync-unknown-payments
+  requiresHumanReview: true

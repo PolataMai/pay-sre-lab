@@ -74,6 +74,23 @@ class ReadOnlyToolsTest {
                 .hasMessage("cannot aggregate mixed currencies");
     }
 
+    @Test
+    void impactToolRefusesToClaimAnExactTotalAtTheCandidateLimit() {
+        var paymentClient = mock(PaymentReadClient.class);
+        var from = Instant.EPOCH;
+        var to = from.plusSeconds(3_600);
+        var candidates = java.util.stream.IntStream.range(0, 200)
+                .mapToObj(index -> payment("P" + index, "CHANNEL_A", "1.00", "CNY"))
+                .toList();
+        when(paymentClient.unknownPayments(from, to, 200)).thenReturn(candidates);
+        var tool = new CalculateIncidentImpactTool(paymentClient);
+
+        assertThatThrownBy(() -> tool.execute(
+                        new CalculateIncidentImpactTool.Input("CHANNEL_A", from, to)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("impact candidate limit reached; exact total is unknown");
+    }
+
     private UnknownPaymentRecord payment(
             String paymentId, String channel, String amount, String currency) {
         return new UnknownPaymentRecord(
