@@ -2,6 +2,8 @@ package io.paysre.control;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
+import io.opentelemetry.api.OpenTelemetry;
 import io.paysre.control.incident.IncidentApplicationService;
 import io.paysre.control.incident.IncidentRepository;
 import io.paysre.control.investigation.InvestigationConclusionRepository;
@@ -41,6 +43,12 @@ class ControlPlaneApplicationTest {
     @Autowired
     private InvestigationConclusionRepository conclusionRepository;
 
+    @Autowired
+    private PrometheusMeterRegistry prometheusRegistry;
+
+    @Autowired
+    private OpenTelemetry openTelemetry;
+
     @Test
     void wiresIncidentIngestionAndRunsTheSchemaMigration() {
         assertThat(incidentService).isNotNull();
@@ -48,6 +56,8 @@ class ControlPlaneApplicationTest {
         assertThat(toolGateway).isNotNull();
         assertThat(investigationOrchestrator).isNotNull();
         assertThat(conclusionRepository.findByIncidentId("MISSING")).isEmpty();
+        assertThat(prometheusRegistry).isNotNull();
+        assertThat(openTelemetry).isNotNull();
         assertThat(toolHandlers)
                 .extracting(handler -> handler.definition().name())
                 .containsExactlyInAnyOrder(

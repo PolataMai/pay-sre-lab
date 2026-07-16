@@ -136,14 +136,14 @@ public record DistributedTraceQuery(
 - Test: all three application context tests
 - Test: `e2e-tests/src/test/java/io/paysre/e2e/DeploymentConfigurationTest.java`
 
-- [ ] Write failing context assertions for a Prometheus registry, an OpenTelemetry tracer/provider, and trace-propagating `RestClient` construction.
-- [ ] Add `micrometer-registry-prometheus` and `spring-boot-starter-opentelemetry` to all services.
-- [ ] Configure `/actuator/prometheus`, 100% sampling in the lab, bounded span limits, OTLP HTTP endpoint, W3C propagation, and environment-driven service resource attributes.
-- [ ] Replace direct `RestClient.builder()` use with Spring's injected `RestClient.Builder`, preserving connect/read timeouts and allowing observation interceptors to propagate context.
-- [ ] Refactor `PaymentTelemetry` to use the application-owned OpenTelemetry bean rather than `GlobalOpenTelemetry`.
-- [ ] Verify unit tests do not require a running Collector and exporters fail non-fatally when disabled in the test profile.
-- [ ] Run: `mvn -pl payment-system/channel-simulator,payment-system/payment-service,sre-control-plane -am test -Djava.version=18`
-- [ ] Commit: `feat: establish service telemetry runtime`
+- [x] Write failing context assertions for a Prometheus registry, an OpenTelemetry tracer/provider, and trace-propagating `RestClient` construction.
+- [x] Add `micrometer-registry-prometheus` and `spring-boot-starter-opentelemetry` to all services.
+- [x] Configure `/actuator/prometheus`, 100% sampling in the lab, bounded span limits, OTLP HTTP endpoint, W3C propagation, and environment-driven service resource attributes.
+- [x] Replace direct `RestClient.builder()` use with Spring's injected `RestClient.Builder`, preserving connect/read timeouts and allowing observation interceptors to propagate context.
+- [x] Refactor `PaymentTelemetry` to use the application-owned OpenTelemetry bean rather than `GlobalOpenTelemetry`.
+- [x] Verify unit tests do not require a running Collector and exporters fail non-fatally when disabled in the test profile.
+- [x] Run: `mvn -pl payment-system/channel-simulator,payment-system/payment-service,sre-control-plane -am test -Djava.version=18`
+- [x] Commit: `feat: establish service telemetry runtime`
 
 ## Task 2: Emit payment-safe structured logs and channel telemetry
 
@@ -324,4 +324,3 @@ public record DistributedTraceQuery(
 7. `feat: expose observability evidence tools`
 8. `feat: investigate incidents across telemetry signals`
 9. `test: prove observability evidence scenario`
-

@@ -69,15 +69,19 @@ public class ControlPlaneApplication {
     @Bean
     PaymentReadClient paymentReadClient(
             @Value("${paysre.payment.base-url}") String baseUrl,
+            RestClient.Builder restClientBuilder,
             ObjectMapper objectMapper) {
-        return new HttpPaymentReadClient(readOnlyRestClient(baseUrl), objectMapper);
+        return new HttpPaymentReadClient(
+                readOnlyRestClient(restClientBuilder, baseUrl), objectMapper);
     }
 
     @Bean
     ChannelReadClient channelReadClient(
             @Value("${paysre.channel.base-url}") String baseUrl,
+            RestClient.Builder restClientBuilder,
             ObjectMapper objectMapper) {
-        return new HttpChannelReadClient(readOnlyRestClient(baseUrl), objectMapper);
+        return new HttpChannelReadClient(
+                readOnlyRestClient(restClientBuilder, baseUrl), objectMapper);
     }
 
     @Bean
@@ -182,11 +186,11 @@ public class ControlPlaneApplication {
                 modelTimeout);
     }
 
-    private RestClient readOnlyRestClient(String baseUrl) {
+    private RestClient readOnlyRestClient(RestClient.Builder builder, String baseUrl) {
         var requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(Duration.ofSeconds(1));
         requestFactory.setReadTimeout(Duration.ofSeconds(3));
-        return RestClient.builder()
+        return builder.clone()
                 .baseUrl(baseUrl)
                 .requestFactory(requestFactory)
                 .build();

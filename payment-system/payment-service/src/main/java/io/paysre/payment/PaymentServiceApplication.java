@@ -9,7 +9,7 @@ import io.paysre.payment.application.UnknownPaymentQueryService;
 import io.paysre.payment.observability.PaymentMetrics;
 import io.paysre.payment.observability.PaymentTelemetry;
 import io.micrometer.core.instrument.MeterRegistry;
-import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.OpenTelemetry;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.UUID;
@@ -38,11 +38,13 @@ public class PaymentServiceApplication {
     }
 
     @Bean
-    ChannelClient channelClient(@Value("${paysre.channel.base-url}") String channelBaseUrl) {
+    ChannelClient channelClient(
+            RestClient.Builder restClientBuilder,
+            @Value("${paysre.channel.base-url}") String channelBaseUrl) {
         var requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(Duration.ofSeconds(1));
         requestFactory.setReadTimeout(Duration.ofSeconds(1));
-        var restClient = RestClient.builder()
+        var restClient = restClientBuilder.clone()
                 .baseUrl(channelBaseUrl)
                 .requestFactory(requestFactory)
                 .build();
@@ -55,9 +57,9 @@ public class PaymentServiceApplication {
     }
 
     @Bean
-    PaymentTelemetry paymentTelemetry() {
+    PaymentTelemetry paymentTelemetry(OpenTelemetry openTelemetry) {
         return new PaymentTelemetry(
-                GlobalOpenTelemetry.getTracer("io.paysre.payment-service"));
+                openTelemetry.getTracer("io.paysre.payment-service"));
     }
 
     @Bean

@@ -12,6 +12,36 @@ server:
   port: ${PAYMENT_SERVICE_PORT:8080}
 
 management:
+  otlp:
+    metrics:
+      export:
+        enabled: false
+  logging:
+    export:
+      otlp:
+        enabled: false
+  tracing:
+    sampling:
+      probability: 1.0
+    propagation:
+      type: w3c
+    export:
+      otlp:
+        enabled: ${OTEL_TRACES_EXPORT_ENABLED:false}
+  opentelemetry:
+    resource-attributes:
+      deployment.environment: ${DEPLOYMENT_ENVIRONMENT:lab}
+    tracing:
+      limits:
+        max-attributes: 64
+        max-attribute-value-length: 256
+        max-events: 64
+        max-links: 16
+      export:
+        otlp:
+          endpoint: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:http://localhost:4318/v1/traces}
+          connect-timeout: 1s
+          timeout: 3s
   endpoint:
     health:
       probes:
