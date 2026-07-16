@@ -11,8 +11,12 @@ import java.util.Set;
 public final class ConclusionValidator {
 
     private static final String REQUIRED_RUNBOOK = "query-and-sync-unknown-payments";
-    private static final Set<String> REQUIRED_EVIDENCE_TYPES = Set.of(
-            "PAYMENT_TIMELINE", "CHANNEL_FINAL_STATE", "INCIDENT_IMPACT");
+    private static final BigDecimal HIGH_CONFIDENCE = new BigDecimal("0.80");
+    private static final Set<String> TRANSACTION_EVIDENCE_TYPES = Set.of(
+            "PAYMENT_TIMELINE",
+            "STRUCTURED_LOGS",
+            "DISTRIBUTED_TRACE",
+            "CHANNEL_FINAL_STATE");
 
     private final EvidenceRepository evidenceRepository;
 
@@ -49,14 +53,77 @@ public final class ConclusionValidator {
                 item.incidentId().equals(incident.incidentId()),
                 "evidence belongs to another incident: " + item.evidenceId()));
         var types = referenced.stream().map(Evidence::evidenceType).collect(java.util.stream.Collectors.toSet());
-        require(types.containsAll(REQUIRED_EVIDENCE_TYPES),
-                "required evidence types are missing");
+        require(types.contains("INCIDENT_IMPACT"),
+                "authoritative incident impact evidence is missing");
+        if (conclusion.confidence().compareTo(HIGH_CONFIDENCE) >= 0) {
+            require(referenced.stream().anyMatch(this::isUsableMetricsEvidence),
+                    "high-confidence conclusion requires aggregate metrics evidence");
+            long transactionEvidenceTypes = referenced.stream()
+                    .filter(item -> isUsableTransactionEvidence(item, referenced))
+                    .map(Evidence::evidenceType)
+                    .filter(TRANSACTION_EVIDENCE_TYPES::contains)
+                    .distinct()
+                    .count();
+            require(transactionEvidenceTypes >= 2,
+                    "high-confidence conclusion requires two transaction-specific evidence types");
+        }
 
         boolean impactMatches = referenced.stream()
                 .filter(item -> item.evidenceType().equals("INCIDENT_IMPACT"))
                 .anyMatch(item -> matchesImpact(item, conclusion));
         require(impactMatches, "conclusion impact does not match incident impact evidence");
         return conclusion;
+    }
+
+    private boolean isUsableMetricsEvidence(Evidence evidence) {
+        if (!evidence.evidenceType().equals("SERVICE_METRICS")) {
+            return false;
+        }
+        var series = evidence.content().path("series");
+        if (!series.isArray()) {
+            return false;
+        }
+        return java.util.stream.StreamSupport.stream(series.spliterator(), false)
+                .map(item -> item.path("samples"))
+                .filter(samples -> samples.isArray())
+                .flatMap(samples -> java.util.stream.StreamSupport.stream(
+                        samples.spliterator(), false))
+                .anyMatch(sample -> sample.path("value").isNumber()
+                        && (!sample.path("available").isBoolean()
+                                || sample.path("available").asBoolean()));
+    }
+
+    private boolean isUsableTransactionEvidence(
+            Evidence evidence, List<Evidence> referenced) {
+        var content = evidence.content();
+        return switch (evidence.evidenceType()) {
+            case "PAYMENT_TIMELINE" -> hasNonEmptyArray(content)
+                    || hasNonEmptyArray(content.path("events"));
+            case "STRUCTURED_LOGS" -> hasNonEmptyArray(content.path("records"));
+            case "DISTRIBUTED_TRACE" -> hasNonEmptyArray(content.path("spans"))
+                    && traceIsLinkedToLogs(content.path("traceId").asText(), referenced);
+            case "CHANNEL_FINAL_STATE" -> Set.of("SUCCESS", "FAILED").contains(
+                    content.path("result").asText());
+            default -> false;
+        };
+    }
+
+    private boolean traceIsLinkedToLogs(String traceId, List<Evidence> referenced) {
+        if (!traceId.matches("[a-fA-F0-9]{32}")) {
+            return false;
+        }
+        return referenced.stream()
+                .filter(item -> item.evidenceType().equals("STRUCTURED_LOGS"))
+                .map(item -> item.content().path("records"))
+                .filter(records -> records.isArray())
+                .flatMap(records -> java.util.stream.StreamSupport.stream(
+                        records.spliterator(), false))
+                .anyMatch(record -> traceId.equalsIgnoreCase(
+                        record.path("traceId").asText()));
+    }
+
+    private boolean hasNonEmptyArray(com.fasterxml.jackson.databind.JsonNode node) {
+        return node.isArray() && !node.isEmpty();
     }
 
     private boolean matchesImpact(Evidence evidence, InvestigationConclusion conclusion) {

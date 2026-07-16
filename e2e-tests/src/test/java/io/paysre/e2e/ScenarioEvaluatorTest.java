@@ -18,6 +18,9 @@ class ScenarioEvaluatorTest {
         assertThat(groundTruth.traffic().payments()).isEqualTo(5);
         assertThat(groundTruth.expected().requiredEvidenceTypes())
                 .containsExactly(
+                        "SERVICE_METRICS",
+                        "STRUCTURED_LOGS",
+                        "DISTRIBUTED_TRACE",
                         "PAYMENT_TIMELINE", "CHANNEL_FINAL_STATE", "INCIDENT_IMPACT");
     }
 
@@ -28,8 +31,14 @@ class ScenarioEvaluatorTest {
         var evaluator = new ScenarioEvaluator();
         var actual = new ScenarioEvaluator.ActualInvestigation(
                 "CHANNEL_TIMEOUT_RESPONSE_LOST",
-                Set.of("PAYMENT_TIMELINE", "CHANNEL_FINAL_STATE", "INCIDENT_IMPACT"),
-                3,
+                Set.of(
+                        "SERVICE_METRICS",
+                        "STRUCTURED_LOGS",
+                        "DISTRIBUTED_TRACE",
+                        "PAYMENT_TIMELINE",
+                        "CHANNEL_FINAL_STATE",
+                        "INCIDENT_IMPACT"),
+                6,
                 "query-and-sync-unknown-payments",
                 true);
 
@@ -45,14 +54,19 @@ class ScenarioEvaluatorTest {
                 "/fault-scenarios/channel-timeout-but-success-v1.yaml").expected();
         var actual = new ScenarioEvaluator.ActualInvestigation(
                 "CHANNEL_TIMEOUT_RESPONSE_LOST",
-                Set.of("PAYMENT_TIMELINE", "INCIDENT_IMPACT"),
+                Set.of(
+                        "SERVICE_METRICS",
+                        "STRUCTURED_LOGS",
+                        "DISTRIBUTED_TRACE",
+                        "PAYMENT_TIMELINE",
+                        "INCIDENT_IMPACT"),
                 2,
                 "query-and-sync-unknown-payments",
                 true);
 
         var score = new ScenarioEvaluator().evaluate(expected, actual);
 
-        assertThat(score.evidenceRecall()).isEqualByComparingTo("0.6667");
+        assertThat(score.evidenceRecall()).isEqualByComparingTo("0.8333");
         assertThat(score.passed()).isFalse();
     }
 
@@ -62,8 +76,14 @@ class ScenarioEvaluatorTest {
                 "/fault-scenarios/channel-timeout-but-success-v1.yaml").expected();
         var actual = new ScenarioEvaluator.ActualInvestigation(
                 "CHANNEL_TIMEOUT_RESPONSE_LOST",
-                Set.of("PAYMENT_TIMELINE", "CHANNEL_FINAL_STATE", "INCIDENT_IMPACT"),
-                2,
+                Set.of(
+                        "SERVICE_METRICS",
+                        "STRUCTURED_LOGS",
+                        "DISTRIBUTED_TRACE",
+                        "PAYMENT_TIMELINE",
+                        "CHANNEL_FINAL_STATE",
+                        "INCIDENT_IMPACT"),
+                5,
                 "query-and-sync-unknown-payments",
                 true);
 

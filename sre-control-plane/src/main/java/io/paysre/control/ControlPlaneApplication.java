@@ -208,8 +208,8 @@ public class ControlPlaneApplication {
     }
 
     @Bean
-    InvestigationModel investigationModel(ObjectMapper objectMapper) {
-        return new StubInvestigationModel(objectMapper);
+    InvestigationModel investigationModel(ObjectMapper objectMapper, Clock clock) {
+        return new StubInvestigationModel(objectMapper, clock);
     }
 
     @Bean

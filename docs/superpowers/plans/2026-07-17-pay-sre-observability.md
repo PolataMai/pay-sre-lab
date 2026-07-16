@@ -263,13 +263,13 @@ public record DistributedTraceQuery(
 - Modify: `fault-scenarios/channel-timeout-but-success-v1.yaml`
 - Modify: evaluator tests
 
-- [ ] Extend the deterministic sequence to query unknown-rate metrics, find the representative payment's state-change log, obtain its trace ID, fetch the distributed trace, then use the existing timeline/channel/impact tools.
-- [ ] Never use a trace ID invented by the model; it must come from persisted Evidence.
-- [ ] Require at least one aggregate (`SERVICE_METRICS`) and two transaction-specific facts among timeline/log/trace/channel Evidence for a high-confidence conclusion.
-- [ ] Keep `INCIDENT_IMPACT` authoritative for counts and money.
-- [ ] If an observability backend is unavailable, continue with remaining sources only when the scenario's minimum evidence rule can still be met; otherwise transition to `NEEDS_HUMAN`.
-- [ ] Add Ground Truth expectations for telemetry Evidence without making Grafana itself a correctness dependency.
-- [ ] Commit: `feat: investigate incidents across telemetry signals`
+- [x] Extend the deterministic sequence to query unknown-rate metrics, find the representative payment's state-change log, obtain its trace ID, fetch the distributed trace, then use the existing timeline/channel/impact tools.
+- [x] Never use a trace ID invented by the model; it must come from persisted Evidence.
+- [x] Require at least one aggregate (`SERVICE_METRICS`) and two transaction-specific facts among timeline/log/trace/channel Evidence for a high-confidence conclusion.
+- [x] Keep `INCIDENT_IMPACT` authoritative for counts and money.
+- [x] If an observability backend is unavailable, continue with remaining sources only when the scenario's minimum evidence rule can still be met; otherwise transition to `NEEDS_HUMAN`.
+- [x] Add Ground Truth expectations for telemetry Evidence without making Grafana itself a correctness dependency.
+- [x] Commit: `feat: investigate incidents across telemetry signals`
 
 ## Task 8: Prove the vertical slice through Docker
 
