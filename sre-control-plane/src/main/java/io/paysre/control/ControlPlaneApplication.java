@@ -6,6 +6,11 @@ import io.paysre.control.incident.IncidentApplicationService;
 import io.paysre.control.incident.IncidentIdGenerator;
 import io.paysre.control.incident.IncidentRepository;
 import io.paysre.control.incident.UlidIncidentIdGenerator;
+import io.paysre.control.investigation.ConclusionValidator;
+import io.paysre.control.investigation.InvestigationConclusionRepository;
+import io.paysre.control.investigation.InvestigationModel;
+import io.paysre.control.investigation.InvestigationOrchestrator;
+import io.paysre.control.investigation.StubInvestigationModel;
 import io.paysre.control.tools.CalculateIncidentImpactTool;
 import io.paysre.control.tools.ChannelReadClient;
 import io.paysre.control.tools.GetPaymentTimelineTool;
@@ -123,6 +128,35 @@ public class ControlPlaneApplication {
                 auditRepository,
                 clock,
                 () -> "EVD-" + UUID.randomUUID().toString().replace("-", ""));
+    }
+
+    @Bean
+    InvestigationModel investigationModel(ObjectMapper objectMapper) {
+        return new StubInvestigationModel(objectMapper);
+    }
+
+    @Bean
+    ConclusionValidator conclusionValidator(EvidenceRepository evidenceRepository) {
+        return new ConclusionValidator(evidenceRepository);
+    }
+
+    @Bean
+    InvestigationOrchestrator investigationOrchestrator(
+            IncidentRepository incidentRepository,
+            EvidenceRepository evidenceRepository,
+            InvestigationConclusionRepository conclusionRepository,
+            InvestigationModel investigationModel,
+            ToolGateway toolGateway,
+            ConclusionValidator validator,
+            Clock clock) {
+        return new InvestigationOrchestrator(
+                incidentRepository,
+                evidenceRepository,
+                conclusionRepository,
+                investigationModel,
+                toolGateway,
+                validator,
+                clock);
     }
 
     private RestClient readOnlyRestClient(String baseUrl) {

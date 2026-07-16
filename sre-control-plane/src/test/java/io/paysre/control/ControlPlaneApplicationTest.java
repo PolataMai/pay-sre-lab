@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import io.paysre.control.incident.IncidentApplicationService;
 import io.paysre.control.incident.IncidentRepository;
+import io.paysre.control.investigation.InvestigationConclusionRepository;
+import io.paysre.control.investigation.InvestigationOrchestrator;
 import io.paysre.control.tools.ToolGateway;
 import io.paysre.control.tools.ToolHandler;
 import java.util.List;
@@ -33,11 +35,19 @@ class ControlPlaneApplicationTest {
     @Autowired
     private List<ToolHandler<?, ?>> toolHandlers;
 
+    @Autowired
+    private InvestigationOrchestrator investigationOrchestrator;
+
+    @Autowired
+    private InvestigationConclusionRepository conclusionRepository;
+
     @Test
     void wiresIncidentIngestionAndRunsTheSchemaMigration() {
         assertThat(incidentService).isNotNull();
         assertThat(repository.findById("MISSING")).isEmpty();
         assertThat(toolGateway).isNotNull();
+        assertThat(investigationOrchestrator).isNotNull();
+        assertThat(conclusionRepository.findByIncidentId("MISSING")).isEmpty();
         assertThat(toolHandlers)
                 .extracting(handler -> handler.definition().name())
                 .containsExactlyInAnyOrder(
