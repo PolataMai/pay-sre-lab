@@ -4,6 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import io.paysre.control.incident.IncidentApplicationService;
 import io.paysre.control.incident.IncidentRepository;
+import io.paysre.control.tools.ToolGateway;
+import io.paysre.control.tools.ToolHandler;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -24,9 +27,22 @@ class ControlPlaneApplicationTest {
     @Autowired
     private IncidentRepository repository;
 
+    @Autowired
+    private ToolGateway toolGateway;
+
+    @Autowired
+    private List<ToolHandler<?, ?>> toolHandlers;
+
     @Test
     void wiresIncidentIngestionAndRunsTheSchemaMigration() {
         assertThat(incidentService).isNotNull();
         assertThat(repository.findById("MISSING")).isEmpty();
+        assertThat(toolGateway).isNotNull();
+        assertThat(toolHandlers)
+                .extracting(handler -> handler.definition().name())
+                .containsExactlyInAnyOrder(
+                        "get_payment_timeline",
+                        "query_channel_final_state",
+                        "calculate_incident_impact");
     }
 }

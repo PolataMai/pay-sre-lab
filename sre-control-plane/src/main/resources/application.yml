@@ -8,6 +8,12 @@ spring:
   flyway:
     enabled: true
 
+paysre:
+  payment:
+    base-url: ${PAYMENT_SERVICE_BASE_URL:http://localhost:8080}
+  channel:
+    base-url: ${CHANNEL_SIMULATOR_BASE_URL:http://localhost:8081}
+
 server:
   port: ${CONTROL_PLANE_PORT:8082}
 
