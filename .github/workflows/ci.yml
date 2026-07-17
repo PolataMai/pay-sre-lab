@@ -39,6 +39,9 @@ jobs:
         run: |
           docker compose -f deploy/compose.yaml ps --all > compose-status.txt || true
           docker compose -f deploy/compose.yaml logs --no-color > compose.log || true
+          docker compose -f deploy/compose.yaml exec -T payment-service sh -c \
+            'find /var/log/paysre -maxdepth 1 -type f -exec sh -c '\''echo "--- $1"; wc -c "$1"; tail -n 200 "$1"'\'' _ {} \;' \
+            > application-log-files.txt || true
       - name: Stop the evidence stack
         if: always()
         run: docker compose -f deploy/compose.yaml down -v --remove-orphans
@@ -51,4 +54,5 @@ jobs:
             **/target/surefire-reports/**
             compose-status.txt
             compose.log
+            application-log-files.txt
           if-no-files-found: ignore
