@@ -108,7 +108,7 @@ Loki 默认查询响应不包含 structured metadata，因此读取客户端显�
 }
 ```
 
-`signal` 枚举在服务端映射为固定 PromQL。窗口最多 2 小时、步长至少 15 秒、总样本最多 240、Series 最多 20。Prometheus 的 `NaN`/`Inf` 被转换为 `available=false`，不能静默当成零。
+`signal` 枚举在服务端映射为固定 PromQL。窗口最多 2 小时、步长至少 15 秒、总样本最多 240、Series 最多 20。为避免范围起点与步长不对齐而遗漏刚发生的信号，适配器将采样网格锚定在 `end`，保证末端时刻参与计算；最早端至多缩短一个步长。Prometheus 的 `NaN`/`Inf` 被转换为 `available=false`，不能静默当成零。
 
 ### 4.2 `search_structured_logs`
 

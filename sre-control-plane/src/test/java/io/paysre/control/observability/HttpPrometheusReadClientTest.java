@@ -104,6 +104,30 @@ class HttpPrometheusReadClientTest {
     }
 
     @Test
+    void alignsTheRangeGridWithItsEndSoTheLatestPrometheusEvaluationIsIncluded() {
+        var fixture = fixture();
+        fixture.server.expect(request -> {
+                    var query = URLDecoder.decode(
+                            request.getURI().getRawQuery(), StandardCharsets.UTF_8);
+                    assertThat(query)
+                            .contains("start=2026-07-16T11:59:00Z")
+                            .contains("end=2026-07-16T12:00:00Z")
+                            .contains("step=30s");
+                })
+                .andRespond(withSuccess("""
+                        {"status":"success","data":{"resultType":"matrix","result":[]}}
+                        """, MediaType.APPLICATION_JSON));
+
+        fixture.client.query(query(
+                MetricSignal.PAYMENT_UNKNOWN_CURRENT,
+                NOW.minusSeconds(65),
+                NOW,
+                Duration.ofSeconds(30)));
+
+        fixture.server.verify();
+    }
+
+    @Test
     void rejectsUnboundedOrUnsupportedQueriesBeforeIo() {
         var fixture = fixture();
 

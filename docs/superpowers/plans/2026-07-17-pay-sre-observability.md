@@ -83,7 +83,7 @@ public enum MetricSignal {
 }
 ```
 
-`PrometheusReadClient` maps each enum to a repository-owned PromQL template. Callers cannot submit expressions. Output contains the selected signal, normalized series labels, timestamp/value samples, backend warnings, and a `truncated` flag.
+`PrometheusReadClient` maps each enum to a repository-owned PromQL template. Callers cannot submit expressions. Output contains the selected signal, normalized series labels, timestamp/value samples, backend warnings, and a `truncated` flag. Its range grid is aligned backwards from `end`, so the latest requested instant is always evaluated even when `from` is not step-aligned; the oldest retained instant may move forward by less than one step.
 
 ### 3.2 Log search
 

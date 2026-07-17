@@ -42,13 +42,14 @@ public final class HttpPrometheusReadClient implements PrometheusReadClient {
     public ServiceMetricsResult query(ServiceMetricsQuery query) {
         validate(query);
         var promQl = query.signal().promQl(query.channel());
+        var alignedStart = alignStartToEnd(query);
         String body;
         try {
             body = restClient.get()
                     .uri(builder -> builder
                             .path("/api/v1/query_range")
                             .queryParam("query", "{promql}")
-                            .queryParam("start", query.from())
+                            .queryParam("start", alignedStart)
                             .queryParam("end", query.to())
                             .queryParam("step", formatStep(query.step()))
                             .queryParam("limit", MAX_SERIES)
@@ -65,6 +66,18 @@ public final class HttpPrometheusReadClient implements PrometheusReadClient {
             throw malformed("Prometheus returned an empty response", null);
         }
         return normalize(query.signal(), body);
+    }
+
+    /**
+     * Prometheus evaluates a range query on the sequence {@code start + n * step}; it does not
+     * add an extra evaluation at an unaligned end.  Anchor the sequence at {@code end} so a
+     * freshly observed signal is not lost merely because the caller's window began a few seconds
+     * before the event.  At most one step is omitted from the oldest part of the requested window.
+     */
+    private Instant alignStartToEnd(ServiceMetricsQuery query) {
+        var range = Duration.between(query.from(), query.to());
+        long completeSteps = range.toNanos() / query.step().toNanos();
+        return query.to().minusNanos(Math.multiplyExact(completeSteps, query.step().toNanos()));
     }
 
     private void validate(ServiceMetricsQuery query) {
