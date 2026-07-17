@@ -120,6 +120,7 @@ class DeploymentConfigurationTest {
                         "parse_from: attributes.traceId",
                         "parse_from: attributes.spanId")
                 .contains("http://loki:3100/otlp", "http://tempo:4318")
+                .doesNotContain("from: attributes.message", "to: body")
                 .doesNotContain("/var/lib/docker/containers");
         assertThat(loki).contains("allow_structured_metadata: true", "retention_period: 2h");
         assertThat(tempo).contains("block_retention: 2h", "0.0.0.0:4318");

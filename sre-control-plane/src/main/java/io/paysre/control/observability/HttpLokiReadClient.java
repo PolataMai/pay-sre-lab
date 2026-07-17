@@ -116,7 +116,7 @@ public final class HttpLokiReadClient implements LokiReadClient {
     private String buildLogQl(StructuredLogSearch search) {
         var query = new StringBuilder("{service_name=\"")
                 .append(escape(search.service()))
-                .append("\"} | severity_text=~\"")
+                .append("\"} | json | log_level=~\"")
                 .append(search.minimumLevel().minimumRegex())
                 .append('"');
         if (search.event() != null) {

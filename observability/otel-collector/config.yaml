@@ -33,10 +33,6 @@ receivers:
         span_id:
           parse_from: attributes.spanId
         on_error: send
-      - type: move
-        from: attributes.message
-        to: body
-
 processors:
   memory_limiter:
     check_interval: 1s

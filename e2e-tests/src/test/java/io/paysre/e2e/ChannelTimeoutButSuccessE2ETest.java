@@ -236,6 +236,7 @@ class ChannelTimeoutButSuccessE2ETest {
 
     private Optional<String> findTraceIdInLogs(String paymentId, Instant from) {
         var query = "{service_name=\"payment-service\"}"
+                + " | json"
                 + " | paymentId=\"" + paymentId + "\""
                 + " | event=\"PAYMENT_STATE_CHANGED\""
                 + " | reasonCode=\"CHANNEL_TIMEOUT\"";

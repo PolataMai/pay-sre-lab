@@ -74,9 +74,9 @@ Spring Boot 输出 ECS JSON。支付状态变更日志携带：
 - `fromStatus`, `toStatus`, `reasonCode`
 - ECS `traceId` 和 `spanId`
 
-应用以非 root UID/GID `10001` 写共享只写日志卷。Collector 的 `filelog` Receiver 解析 ECS JSON，`trace_parser` 把 ECS 顶层 `traceId`/`spanId` 字段提升为 OTLP LogRecord 的 TraceId/SpanId，再通过 Loki 原生 OTLP 入口发送。这样 Loki 返回的 `trace_id` 是日志上下文本身携带的 ID，而不是 Agent 猜出的字符串。
+应用以非 root UID/GID `10001` 写共享只写日志卷。Collector 的 `filelog` Receiver 保留原始 ECS JSON 行，同时解析字段；`trace_parser` 把 ECS 顶层 `traceId`/`spanId` 字段提升为 OTLP LogRecord 的 TraceId/SpanId，再通过 Loki 原生 OTLP 入口发送。这样 Loki 返回的 `trace_id` 是日志上下文本身携带的 ID，而不是 Agent 猜出的字符串。
 
-Loki 默认查询响应不包含 structured metadata，因此读取客户端显式发送 `X-Loki-Response-Encoding-Flags: categorize-labels`。响应归一化仍兼容两种官方 JSON 编码：旧式/未分类的扁平 metadata，以及启用 label categorization 后的 `structuredMetadata`/`parsed` 信封。原始 structured metadata 优先于 query-time parsed labels，避免解析结果覆盖证据源字段。
+Loki 默认查询响应不包含 structured metadata，因此读取客户端显式发送 `X-Loki-Response-Encoding-Flags: categorize-labels`。每次检索先用 `| json` 从原始 ECS 行解析支付字段，再按 allowlisted service/event/level/payment/trace 条件过滤；这避免依赖 Loki 对 OTLP attribute 名称的版本相关转换。响应归一化兼容两种官方 JSON 编码：旧式/未分类的扁平 metadata，以及启用 label categorization 后的 `structuredMetadata`/`parsed` 信封。原始 structured metadata 优先于 query-time parsed labels，避免查询解析结果覆盖源 trace 或 span 字段。
 
 日志工具只投影安全字段，单条消息最多 2 KiB，总结果最多 200 条、1 MiB 后端响应、64 KiB Evidence。
 

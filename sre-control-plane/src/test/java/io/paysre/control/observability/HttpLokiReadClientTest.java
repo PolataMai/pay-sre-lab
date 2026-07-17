@@ -34,7 +34,7 @@ class HttpLokiReadClientTest {
                             request.getURI().getRawQuery(), StandardCharsets.UTF_8);
                     assertThat(decoded)
                             .contains("query={service_name=\"payment-service\"}")
-                            .contains("severity_text=~\"INFO|WARN|ERROR|FATAL\"")
+                            .contains("| json | log_level=~\"INFO|WARN|ERROR|FATAL\"")
                             .contains("event=\"PAYMENT_STATE_CHANGED\"")
                             .contains("paymentId=\"PAY-\\\"42\\\\A\"")
                             .contains("start=1784203140123456789")
