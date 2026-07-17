@@ -46,7 +46,7 @@ flowchart LR
 - `payment-service`：支付受理、幂等、状态机、业务指标与 Trace 语义。
 - `sre-control-plane`：告警聚合、Incident、可观测只读工具、Evidence、审计、调查编排与评分输入。
 
-技术基线为 Java 21、Spring Boot 4.1、Spring AI 2.0 BOM、PostgreSQL 17、Prometheus 3.12、Loki 3.7、Tempo 2.10、OpenTelemetry Collector 0.156 和 Grafana 13.1。当前调查使用确定性 Stub Model，从而让 CI 与回归评测完全可复现；真实模型适配器属于后续独立阶段。
+技术基线为 Java 21、Spring Boot 4.1、Spring AI 2.0 BOM、PostgreSQL 17、Prometheus 3.12、Loki 3.7、Tempo 2.10、OpenTelemetry Collector 0.156 和 Grafana 13.1。调查模型可切换：默认的确定性 Stub Model 让 CI 与回归评测完全可复现；设置 `INVESTIGATION_MODEL=minimax` 后由 MiniMax（OpenAI 兼容 API）驱动真实调查，见下文「接入真实模型（MiniMax）」。
 
 ## 快速验证
 
@@ -111,6 +111,27 @@ PAY_SRE_COMPOSE_E2E=true mvn -B -ntp -pl e2e-tests -am \
 ```
 
 测试会在 90 秒上限内轮询摄入状态，验证 UNKNOWN Gauge 不含交易 ID Label、状态日志携带 `CHANNEL_TIMEOUT` 和 TraceId、同一 Trace 含支付/渠道 Span、六类 Evidence 哈希可重算，并验证每次工具调用都有审计记录。
+
+## 接入真实模型（MiniMax）
+
+默认调查由确定性 Stub Model 驱动。要让 MiniMax 真实模型接管决策：
+
+1. 在 [platform.minimax.io](https://platform.minimax.io)（国际站）或 [platform.minimaxi.com](https://platform.minimaxi.com)（国内站）创建 API key。
+2. 复制 `deploy/env.example` 为 `deploy/.env`，填入 `MINIMAX_API_KEY`，并设置：
+
+```bash
+INVESTIGATION_MODEL=minimax
+MINIMAX_API_KEY=<你的真实 key>          # 仓库中永远只保留占位符
+MINIMAX_BASE_URL=https://api.minimax.io/v1   # 国内站改为 https://api.minimaxi.com/v1
+MINIMAX_MODEL=MiniMax-M2                # 可选 MiniMax-M2.1 / M2.5 / M2.7 / M3
+INVESTIGATION_MODEL_TIMEOUT=PT60S       # 真实模型需要比 stub 更长的单步预算
+```
+
+3. `docker compose -f deploy/compose.yaml --env-file deploy/.env up -d --build --wait`，之后照常运行故障场景。
+
+模型只能通过 OpenAI 兼容的 function calling 在 8 个工具里做选择：6 个只读网关工具，加 `conclude_investigation` 与 `escalate_to_human` 两个决策工具。每一步决策都是无状态单发请求——完整调查状态（Incident、种子交易、已采集 Evidence、历史工具结果、上一次结论校验失败原因）每轮重建注入。所有既有安全边界原样生效：工具审计、Evidence 哈希、结论验证器、12 次调用/120 秒/连续空结果的 fail-closed 熔断。模型返回自由文本、未知根因、非法金额或网络故障时一律转 `NEEDS_HUMAN`，绝不猜测。设计细节见 [`docs/superpowers/specs/2026-07-17-minimax-investigation-model-design.md`](docs/superpowers/specs/2026-07-17-minimax-investigation-model-design.md)。
+
+缺 key 启动 `minimax` 模式会直接拒绝启动；CI 与 `mvn clean verify` 不需要任何外部凭据。
 
 ## 安全不变量
 
