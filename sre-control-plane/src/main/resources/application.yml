@@ -21,7 +21,15 @@ paysre:
     tempo:
       base-url: ${TEMPO_BASE_URL:http://localhost:3200}
   investigation:
+    model: ${INVESTIGATION_MODEL:stub}
     model-timeout: ${INVESTIGATION_MODEL_TIMEOUT:PT10S}
+    minimax:
+      base-url: ${MINIMAX_BASE_URL:https://api.minimax.io/v1}
+      api-key: ${MINIMAX_API_KEY:}
+      model: ${MINIMAX_MODEL:MiniMax-M2}
+      temperature: ${MINIMAX_TEMPERATURE:1.0}
+      max-completion-tokens: ${MINIMAX_MAX_COMPLETION_TOKENS:4096}
+      read-timeout: ${MINIMAX_READ_TIMEOUT:PT45S}
 
 server:
   port: ${CONTROL_PLANE_PORT:8082}

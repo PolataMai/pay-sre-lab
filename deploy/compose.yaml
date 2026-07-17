@@ -249,6 +249,11 @@ services:
       PROMETHEUS_BASE_URL: http://prometheus:9090
       LOKI_BASE_URL: http://loki:3100
       TEMPO_BASE_URL: http://tempo:3200
+      INVESTIGATION_MODEL: ${INVESTIGATION_MODEL:-stub}
+      INVESTIGATION_MODEL_TIMEOUT: ${INVESTIGATION_MODEL_TIMEOUT:-PT10S}
+      MINIMAX_BASE_URL: ${MINIMAX_BASE_URL:-https://api.minimax.io/v1}
+      MINIMAX_MODEL: ${MINIMAX_MODEL:-MiniMax-M2}
+      MINIMAX_API_KEY: ${MINIMAX_API_KEY:-}
       OTEL_TRACES_EXPORT_ENABLED: true
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
       LOGGING_FILE_NAME: /var/log/paysre/sre-control-plane.json

@@ -11,6 +11,8 @@ import io.paysre.control.investigation.InvestigationConclusionRepository;
 import io.paysre.control.investigation.InvestigationModel;
 import io.paysre.control.investigation.InvestigationOrchestrator;
 import io.paysre.control.investigation.StubInvestigationModel;
+import io.paysre.control.investigation.minimax.HttpMiniMaxChatClient;
+import io.paysre.control.investigation.minimax.MiniMaxInvestigationModel;
 import io.paysre.control.observability.HttpLokiReadClient;
 import io.paysre.control.observability.HttpPrometheusReadClient;
 import io.paysre.control.observability.HttpTempoReadClient;
@@ -208,8 +210,46 @@ public class ControlPlaneApplication {
     }
 
     @Bean
-    InvestigationModel investigationModel(ObjectMapper objectMapper, Clock clock) {
-        return new StubInvestigationModel(objectMapper, clock);
+    InvestigationModel investigationModel(
+            @Value("${paysre.investigation.model}") String modelMode,
+            @Value("${paysre.investigation.minimax.base-url}") String miniMaxBaseUrl,
+            @Value("${paysre.investigation.minimax.api-key}") String miniMaxApiKey,
+            @Value("${paysre.investigation.minimax.model}") String miniMaxModel,
+            @Value("${paysre.investigation.minimax.temperature}") double miniMaxTemperature,
+            @Value("${paysre.investigation.minimax.max-completion-tokens}")
+                    int miniMaxMaxCompletionTokens,
+            @Value("${paysre.investigation.minimax.read-timeout}") Duration miniMaxReadTimeout,
+            RestClient.Builder restClientBuilder,
+            ObjectMapper objectMapper,
+            Clock clock) {
+        return switch (modelMode) {
+            case "stub" -> new StubInvestigationModel(objectMapper, clock);
+            case "minimax" -> {
+                if (miniMaxApiKey.isBlank()) {
+                    throw new IllegalStateException(
+                            "MINIMAX_API_KEY must be set when "
+                                    + "paysre.investigation.model is minimax");
+                }
+                var requestFactory = new SimpleClientHttpRequestFactory();
+                requestFactory.setConnectTimeout(Duration.ofSeconds(2));
+                requestFactory.setReadTimeout(miniMaxReadTimeout);
+                var restClient = restClientBuilder.clone()
+                        .baseUrl(miniMaxBaseUrl)
+                        .defaultHeader("Authorization", "Bearer " + miniMaxApiKey)
+                        .requestFactory(requestFactory)
+                        .build();
+                yield new MiniMaxInvestigationModel(
+                        new HttpMiniMaxChatClient(
+                                restClient,
+                                objectMapper,
+                                miniMaxModel,
+                                miniMaxTemperature,
+                                miniMaxMaxCompletionTokens),
+                        objectMapper);
+            }
+            default -> throw new IllegalArgumentException(
+                    "unsupported investigation model: " + modelMode);
+        };
     }
 
     @Bean
