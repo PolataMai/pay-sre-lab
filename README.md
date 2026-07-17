@@ -157,7 +157,9 @@ NACOS_PASSWORD=<password>
 - Evidence 内容递归按 JSON Key 规范化后再计算哈希；数组顺序保留业务语义。
 - 模型不能自行计算或改写影响金额；结论必须匹配影响面 Evidence。
 - 建议 Runbook 是允许列表中的确定名称，且当前场景强制人工复核。
-- 不允许直接修改支付状态或账务流水。
+- 写路径与调查模型完全隔离：Runbook 必须由人提案、由另一个人审批（four-eyes）才会执行，Action Guard 审计每一次尝试（含拒绝）。
+- 控制面从不直接改写支付状态：`query-and-sync-unknown-payments` 只触发支付服务自行向渠道查询终态并走状态机收敛；处置范围锁定为结论引用的影响面 Evidence。
+- Runbook 执行成功 → Incident `MITIGATED`；执行失败或超时 → `NEEDS_HUMAN`（fail-closed）。
 
 ## 主要 API
 
@@ -172,6 +174,10 @@ NACOS_PASSWORD=<password>
 | `GET` | `/api/incidents/{id}/evidence` | 查询脱敏后的 Evidence 元数据 |
 | `GET` | `/api/incidents/{id}/evidence/{evidenceId}` | 查询 Incident-owned 规范 Evidence 内容 |
 | `GET` | `/api/incidents/{id}/tool-audits` | 查询完整只读工具审计链 |
+| `POST` | `/api/payments/{id}/state-sync` | 触发支付服务向渠道查询终态并收敛 UNKNOWN |
+| `POST` | `/api/incidents/{id}/runbook-executions` | 提案执行允许列表内的 Runbook |
+| `POST` | `/api/incidents/{id}/runbook-executions/{execId}/approval` | 第二人审批并受控执行（four-eyes） |
+| `GET` | `/api/incidents/{id}/runbook-executions` | 查询 Runbook 执行单与结果 |
 
 ## 仓库导航
 
