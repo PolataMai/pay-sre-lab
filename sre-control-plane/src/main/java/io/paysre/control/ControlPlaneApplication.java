@@ -14,6 +14,14 @@ import io.paysre.control.investigation.StubInvestigationModel;
 import io.paysre.control.investigation.minimax.HttpMiniMaxChatClient;
 import io.paysre.control.investigation.minimax.MiniMaxInvestigationModel;
 import io.paysre.control.observability.HttpLokiReadClient;
+import io.paysre.control.remediation.ActionAuditRepository;
+import io.paysre.control.remediation.ActionGuard;
+import io.paysre.control.remediation.HttpPaymentWriteClient;
+import io.paysre.control.remediation.PaymentWriteClient;
+import io.paysre.control.remediation.QueryAndSyncUnknownPaymentsRunbook;
+import io.paysre.control.remediation.Runbook;
+import io.paysre.control.remediation.RunbookExecutionRepository;
+import io.paysre.control.remediation.RunbookExecutionService;
 import io.paysre.control.observability.HttpPrometheusReadClient;
 import io.paysre.control.observability.HttpTempoReadClient;
 import io.paysre.control.observability.LokiReadClient;
@@ -35,6 +43,7 @@ import io.paysre.control.tools.ToolHandler;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
@@ -255,6 +264,87 @@ public class ControlPlaneApplication {
     @Bean
     ConclusionValidator conclusionValidator(EvidenceRepository evidenceRepository) {
         return new ConclusionValidator(evidenceRepository);
+    }
+
+    @Bean
+    PaymentWriteClient paymentWriteClient(
+            @Value("${paysre.payment.base-url}") String baseUrl,
+            RestClient.Builder restClientBuilder,
+            ObjectMapper objectMapper) {
+        var requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(Duration.ofSeconds(2));
+        requestFactory.setReadTimeout(Duration.ofSeconds(5));
+        var restClient = restClientBuilder.clone()
+                .baseUrl(baseUrl)
+                .requestFactory(requestFactory)
+                .build();
+        return new HttpPaymentWriteClient(restClient, objectMapper);
+    }
+
+    @Bean
+    QueryAndSyncUnknownPaymentsRunbook queryAndSyncUnknownPaymentsRunbook(
+            EvidenceRepository evidenceRepository,
+            PaymentWriteClient paymentWriteClient,
+            ObjectMapper objectMapper) {
+        return new QueryAndSyncUnknownPaymentsRunbook(
+                evidenceRepository, paymentWriteClient, objectMapper);
+    }
+
+    @Bean
+    ActionGuard actionGuard(
+            IncidentRepository incidentRepository,
+            InvestigationConclusionRepository conclusionRepository,
+            RunbookExecutionRepository executionRepository,
+            ActionAuditRepository actionAuditRepository,
+            Clock clock) {
+        return new ActionGuard(
+                Set.of(QueryAndSyncUnknownPaymentsRunbook.NAME),
+                incidentRepository,
+                conclusionRepository,
+                executionRepository,
+                actionAuditRepository,
+                clock,
+                () -> "ACT-" + UUID.randomUUID().toString().replace("-", ""));
+    }
+
+    @Bean(destroyMethod = "shutdown")
+    ExecutorService runbookExecutor() {
+        var sequence = new AtomicInteger();
+        return new ThreadPoolExecutor(
+                1,
+                1,
+                60,
+                TimeUnit.SECONDS,
+                new ArrayBlockingQueue<>(4),
+                runnable -> {
+                    var thread = new Thread(
+                            runnable, "paysre-runbook-" + sequence.incrementAndGet());
+                    thread.setDaemon(true);
+                    return thread;
+                },
+                new ThreadPoolExecutor.AbortPolicy());
+    }
+
+    @Bean
+    RunbookExecutionService runbookExecutionService(
+            ActionGuard actionGuard,
+            List<Runbook> runbooks,
+            RunbookExecutionRepository executionRepository,
+            IncidentRepository incidentRepository,
+            InvestigationConclusionRepository conclusionRepository,
+            Clock clock,
+            @Qualifier("runbookExecutor") ExecutorService runbookExecutor,
+            @Value("${paysre.remediation.execution-timeout:PT60S}") Duration executionTimeout) {
+        return new RunbookExecutionService(
+                actionGuard,
+                runbooks,
+                executionRepository,
+                incidentRepository,
+                conclusionRepository,
+                clock,
+                runbookExecutor,
+                executionTimeout,
+                () -> "RUN-" + UUID.randomUUID().toString().replace("-", ""));
     }
 
     @Bean
