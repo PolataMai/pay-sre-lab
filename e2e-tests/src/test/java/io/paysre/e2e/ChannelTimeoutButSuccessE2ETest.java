@@ -107,7 +107,7 @@ class ChannelTimeoutButSuccessE2ETest {
 
         var metrics = evidenceByType.get("SERVICE_METRICS").path("content");
         assertThat(metricSamples(metrics))
-                .withFailMessage("metrics evidence contained no usable sample: %s", metrics)
+                .withFailMessage("metrics evidence contained no usable sample: %s", metrics.toString())
                 .anySatisfy(sample -> {
                     assertThat(sample.path("available").asBoolean()).isTrue();
                     assertThat(sample.path("value").decimalValue())

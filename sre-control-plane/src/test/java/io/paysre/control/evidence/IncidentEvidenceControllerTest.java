@@ -11,6 +11,7 @@ import io.paysre.control.tools.ToolInvocation;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.server.ResponseStatusException;
@@ -36,12 +37,12 @@ class IncidentEvidenceControllerTest {
         when(evidenceRepository.findById("EVD-1")).thenReturn(Optional.of(evidence));
         when(auditRepository.findByIncidentId("INC-01")).thenReturn(List.of(invocation));
         var controller = new IncidentEvidenceController(
-                evidenceRepository, auditRepository);
+                evidenceRepository, auditRepository, new ObjectMapper());
 
         assertThat(controller.getEvidence("INC-01", "EVD-1"))
                 .satisfies(view -> {
-                    assertThat(view.content().path("signal").asText())
-                            .isEqualTo("PAYMENT_UNKNOWN_CURRENT");
+                    assertThat(view.content()).isEqualTo(Map.of(
+                            "signal", "PAYMENT_UNKNOWN_CURRENT"));
                     assertThat(view.sha256()).isEqualTo("a".repeat(64));
                 });
         assertThat(controller.getToolAudits("INC-01"))
@@ -54,7 +55,7 @@ class IncidentEvidenceControllerTest {
         when(evidenceRepository.findById("EVD-1"))
                 .thenReturn(Optional.of(evidence("EVD-1", "INC-02")));
         var controller = new IncidentEvidenceController(
-                evidenceRepository, mock(ToolAuditRepository.class));
+                evidenceRepository, mock(ToolAuditRepository.class), new ObjectMapper());
 
         assertThatThrownBy(() -> controller.getEvidence("INC-01", "EVD-1"))
                 .isInstanceOf(ResponseStatusException.class)

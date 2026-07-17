@@ -1,6 +1,6 @@
 package io.paysre.control.evidence;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.paysre.control.tools.ToolAuditRepository;
 import io.paysre.control.tools.ToolInvocation;
 import java.time.Instant;
@@ -18,12 +18,14 @@ public final class IncidentEvidenceController {
 
     private final EvidenceRepository evidenceRepository;
     private final ToolAuditRepository auditRepository;
+    private final ObjectMapper objectMapper;
 
     public IncidentEvidenceController(
-            EvidenceRepository evidenceRepository,
-            ToolAuditRepository auditRepository) {
+            EvidenceRepository evidenceRepository, ToolAuditRepository auditRepository,
+            ObjectMapper objectMapper) {
         this.evidenceRepository = evidenceRepository;
         this.auditRepository = auditRepository;
+        this.objectMapper = objectMapper;
     }
 
     @GetMapping("/evidence/{evidenceId}")
@@ -31,7 +33,7 @@ public final class IncidentEvidenceController {
             @PathVariable String incidentId, @PathVariable String evidenceId) {
         return evidenceRepository.findById(evidenceId)
                 .filter(item -> item.incidentId().equals(incidentId))
-                .map(EvidenceDetails::from)
+                .map(item -> EvidenceDetails.from(item, objectMapper))
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "incident evidence not found"));
     }
@@ -46,17 +48,17 @@ public final class IncidentEvidenceController {
             String evidenceType,
             String sourceTool,
             int sourceToolVersion,
-            JsonNode content,
+            Object content,
             String sha256,
             Instant collectedAt) {
 
-        private static EvidenceDetails from(Evidence evidence) {
+        private static EvidenceDetails from(Evidence evidence, ObjectMapper objectMapper) {
             return new EvidenceDetails(
                     evidence.evidenceId(),
                     evidence.evidenceType(),
                     evidence.sourceTool(),
                     evidence.sourceToolVersion(),
-                    evidence.content(),
+                    objectMapper.convertValue(evidence.content(), Object.class),
                     evidence.sha256(),
                     evidence.collectedAt());
         }
