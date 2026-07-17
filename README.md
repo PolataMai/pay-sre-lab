@@ -133,6 +133,22 @@ INVESTIGATION_MODEL_TIMEOUT=PT60S       # 真实模型需要比 stub 更长的�
 
 缺 key 启动 `minimax` 模式会直接拒绝启动；CI 与 `mvn clean verify` 不需要任何外部凭据。
 
+## 配置中心（Nacos）
+
+三个应用支持从 Nacos 拉取覆盖配置（Spring Cloud Alibaba `2025.1.0.0`，`spring.config.import` 模式，无 bootstrap）。默认关闭，激活 `nacos` profile 后启用；**Nacos 连接信息只能放在 `deploy/.env`（已被 gitignore）或 shell 环境变量里，仓库中只有 `${NACOS_*}` 占位符**——`NacosConfigurationTest` 会在 `mvn verify` 时拒绝任何写死的地址或凭据。
+
+```bash
+# deploy/.env（gitignored，示例见 deploy/env.example）
+SPRING_PROFILES_ACTIVE=nacos
+NACOS_SERVER_ADDR=<host:8848>       # 拿到地址后填这里
+NACOS_NAMESPACE=                    # 公共命名空间留空
+NACOS_GROUP=pay-sre-lab
+NACOS_USERNAME=<username>
+NACOS_PASSWORD=<password>
+```
+
+在 Nacos 中按 group `pay-sre-lab` 创建三个 YAML dataId：`payment-service.yml`、`channel-simulator.yml`、`sre-control-plane.yml`，内容即想要覆盖的 Spring 配置（典型用法：把 `paysre.investigation.minimax.api-key`、`paysre.investigation.model` 放进 `sre-control-plane.yml`，本地就不再需要 `MINIMAX_API_KEY` 环境变量）。远端配置优先级高于本地 `application.yml`。`nacos` profile 激活但未提供 `NACOS_SERVER_ADDR` 时启动直接失败（fail-fast），不会带病运行。
+
 ## 安全不变量
 
 - 模型不能执行 Shell、SQL、SSH、Kubernetes 或任意 HTTP 请求。
