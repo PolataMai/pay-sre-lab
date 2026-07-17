@@ -10,6 +10,7 @@ import io.paysre.payment.application.PaymentApplicationService;
 import io.paysre.payment.application.PaymentRepository;
 import io.paysre.payment.application.UnknownPaymentQueryService;
 import io.paysre.payment.application.UnknownPaymentSummary;
+import io.paysre.payment.application.UnknownPaymentSyncService;
 import io.paysre.payment.domain.PaymentOrder;
 import io.paysre.payment.domain.PaymentStatus;
 import java.math.BigDecimal;
@@ -29,7 +30,8 @@ class PaymentControllerTest {
         var controller = new PaymentController(
                 mock(PaymentApplicationService.class),
                 repository,
-                mock(UnknownPaymentQueryService.class));
+                mock(UnknownPaymentQueryService.class),
+                mock(UnknownPaymentSyncService.class));
 
         var view = controller.get("P10001");
 
@@ -47,7 +49,8 @@ class PaymentControllerTest {
         var controller = new PaymentController(
                 mock(PaymentApplicationService.class),
                 repository,
-                mock(UnknownPaymentQueryService.class));
+                mock(UnknownPaymentQueryService.class),
+                mock(UnknownPaymentSyncService.class));
 
         assertThatThrownBy(() -> controller.get("MISSING"))
                 .isInstanceOf(PaymentNotFoundException.class);
@@ -73,10 +76,44 @@ class PaymentControllerTest {
         var controller = new PaymentController(
                 mock(PaymentApplicationService.class),
                 mock(PaymentRepository.class),
-                query);
+                query,
+                mock(UnknownPaymentSyncService.class));
 
         assertThat(controller.search(PaymentStatus.UNKNOWN, from, to, 50))
                 .containsExactly(expected);
+    }
+
+    @Test
+    void triggersAChannelStateSyncForAPayment() {
+        var sync = mock(UnknownPaymentSyncService.class);
+        var expected = new io.paysre.payment.application.PaymentSyncResult(
+                "P10001",
+                PaymentStatus.UNKNOWN,
+                PaymentStatus.SUCCESS,
+                io.paysre.contracts.ChannelResult.SUCCESS,
+                io.paysre.payment.application.PaymentSyncOutcome.SYNCED);
+        when(sync.sync("P10001")).thenReturn(Optional.of(expected));
+        var controller = new PaymentController(
+                mock(PaymentApplicationService.class),
+                mock(PaymentRepository.class),
+                mock(UnknownPaymentQueryService.class),
+                sync);
+
+        assertThat(controller.stateSync("P10001")).isEqualTo(expected);
+    }
+
+    @Test
+    void mapsAStateSyncForAMissingPaymentToNotFound() {
+        var sync = mock(UnknownPaymentSyncService.class);
+        when(sync.sync("MISSING")).thenReturn(Optional.empty());
+        var controller = new PaymentController(
+                mock(PaymentApplicationService.class),
+                mock(PaymentRepository.class),
+                mock(UnknownPaymentQueryService.class),
+                sync);
+
+        assertThatThrownBy(() -> controller.stateSync("MISSING"))
+                .isInstanceOf(PaymentNotFoundException.class);
     }
 
     private PaymentOrder unknownPayment() {

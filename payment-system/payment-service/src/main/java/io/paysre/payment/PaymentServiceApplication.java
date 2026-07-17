@@ -2,7 +2,9 @@ package io.paysre.payment;
 
 import io.paysre.payment.adapter.http.HttpChannelClient;
 import io.paysre.payment.application.ChannelClient;
+import io.paysre.payment.application.ChannelStateQuery;
 import io.paysre.payment.application.PaymentApplicationService;
+import io.paysre.payment.application.UnknownPaymentSyncService;
 import io.paysre.payment.application.PaymentIdGenerator;
 import io.paysre.payment.application.PaymentRepository;
 import io.paysre.payment.application.UnknownPaymentQueryService;
@@ -38,7 +40,7 @@ public class PaymentServiceApplication {
     }
 
     @Bean
-    ChannelClient channelClient(
+    HttpChannelClient channelClient(
             RestClient.Builder restClientBuilder,
             @Value("${paysre.channel.base-url}") String channelBaseUrl) {
         var requestFactory = new SimpleClientHttpRequestFactory();
@@ -65,6 +67,17 @@ public class PaymentServiceApplication {
     @Bean
     UnknownPaymentQueryService unknownPaymentQueryService(PaymentRepository repository) {
         return new UnknownPaymentQueryService(repository);
+    }
+
+    @Bean
+    UnknownPaymentSyncService unknownPaymentSyncService(
+            PaymentRepository repository,
+            ChannelStateQuery channelStateQuery,
+            Clock clock,
+            PaymentMetrics metrics,
+            PaymentTelemetry telemetry) {
+        return new UnknownPaymentSyncService(
+                repository, channelStateQuery, clock, metrics, telemetry);
     }
 
     @Bean

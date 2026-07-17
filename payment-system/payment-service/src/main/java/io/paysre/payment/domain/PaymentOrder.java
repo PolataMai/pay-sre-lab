@@ -99,6 +99,11 @@ public final class PaymentOrder {
         transition(PaymentStatus.SUCCESS, "CHANNEL_QUERY", channelCode, now);
     }
 
+    public void confirmUnknownFailure(String channelCode, Instant now) {
+        require(PaymentStatus.UNKNOWN);
+        transition(PaymentStatus.FAILED, "CHANNEL_QUERY", channelCode, now);
+    }
+
     private void require(PaymentStatus expected) {
         if (status != expected) {
             throw new IllegalStateException("expected " + expected + " but was " + status);

@@ -3,8 +3,10 @@ package io.paysre.payment.adapter.http;
 import io.paysre.payment.application.AcceptPaymentCommand;
 import io.paysre.payment.application.PaymentApplicationService;
 import io.paysre.payment.application.PaymentRepository;
+import io.paysre.payment.application.PaymentSyncResult;
 import io.paysre.payment.application.UnknownPaymentQueryService;
 import io.paysre.payment.application.UnknownPaymentSummary;
+import io.paysre.payment.application.UnknownPaymentSyncService;
 import io.paysre.payment.domain.PaymentEvent;
 import io.paysre.payment.domain.PaymentOrder;
 import io.paysre.payment.domain.PaymentStatus;
@@ -31,14 +33,17 @@ public final class PaymentController {
     private final PaymentApplicationService applicationService;
     private final PaymentRepository repository;
     private final UnknownPaymentQueryService unknownPaymentQuery;
+    private final UnknownPaymentSyncService unknownPaymentSync;
 
     public PaymentController(
             PaymentApplicationService applicationService,
             PaymentRepository repository,
-            UnknownPaymentQueryService unknownPaymentQuery) {
+            UnknownPaymentQueryService unknownPaymentQuery,
+            UnknownPaymentSyncService unknownPaymentSync) {
         this.applicationService = applicationService;
         this.repository = repository;
         this.unknownPaymentQuery = unknownPaymentQuery;
+        this.unknownPaymentSync = unknownPaymentSync;
     }
 
     @PostMapping
@@ -55,6 +60,12 @@ public final class PaymentController {
     @GetMapping("/{paymentId}/timeline")
     public List<PaymentEvent> timeline(@PathVariable String paymentId) {
         return find(paymentId).events();
+    }
+
+    @PostMapping("/{paymentId}/state-sync")
+    public PaymentSyncResult stateSync(@PathVariable String paymentId) {
+        return unknownPaymentSync.sync(paymentId)
+                .orElseThrow(() -> new PaymentNotFoundException(paymentId));
     }
 
     @GetMapping(params = "status")
