@@ -7,6 +7,11 @@ spring:
     password: ${CONTROL_DB_PASSWORD:paysre}
   flyway:
     enabled: true
+  cloud:
+    nacos:
+      config:
+        import-check:
+          enabled: false
 
 paysre:
   payment:

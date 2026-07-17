@@ -178,6 +178,12 @@ services:
       OTEL_TRACES_EXPORT_ENABLED: true
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
       LOGGING_FILE_NAME: /var/log/paysre/channel-simulator.json
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-}
+      NACOS_SERVER_ADDR: ${NACOS_SERVER_ADDR:-}
+      NACOS_NAMESPACE: ${NACOS_NAMESPACE:-}
+      NACOS_GROUP: ${NACOS_GROUP:-pay-sre-lab}
+      NACOS_USERNAME: ${NACOS_USERNAME:-}
+      NACOS_PASSWORD: ${NACOS_PASSWORD:-}
     volumes:
       - application-logs:/var/log/paysre
     depends_on:
@@ -211,6 +217,12 @@ services:
       OTEL_TRACES_EXPORT_ENABLED: true
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
       LOGGING_FILE_NAME: /var/log/paysre/payment-service.json
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-}
+      NACOS_SERVER_ADDR: ${NACOS_SERVER_ADDR:-}
+      NACOS_NAMESPACE: ${NACOS_NAMESPACE:-}
+      NACOS_GROUP: ${NACOS_GROUP:-pay-sre-lab}
+      NACOS_USERNAME: ${NACOS_USERNAME:-}
+      NACOS_PASSWORD: ${NACOS_PASSWORD:-}
     volumes:
       - application-logs:/var/log/paysre
     depends_on:
@@ -257,6 +269,12 @@ services:
       OTEL_TRACES_EXPORT_ENABLED: true
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
       LOGGING_FILE_NAME: /var/log/paysre/sre-control-plane.json
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-}
+      NACOS_SERVER_ADDR: ${NACOS_SERVER_ADDR:-}
+      NACOS_NAMESPACE: ${NACOS_NAMESPACE:-}
+      NACOS_GROUP: ${NACOS_GROUP:-pay-sre-lab}
+      NACOS_USERNAME: ${NACOS_USERNAME:-}
+      NACOS_PASSWORD: ${NACOS_PASSWORD:-}
     volumes:
       - application-logs:/var/log/paysre
     depends_on:

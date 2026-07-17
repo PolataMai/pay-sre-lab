@@ -7,6 +7,11 @@ spring:
     password: ${PAYMENT_DB_PASSWORD:paysre}
   flyway:
     enabled: true
+  cloud:
+    nacos:
+      config:
+        import-check:
+          enabled: false
 
 server:
   port: ${PAYMENT_SERVICE_PORT:8080}

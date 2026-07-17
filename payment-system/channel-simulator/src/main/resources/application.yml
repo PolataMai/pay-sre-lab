@@ -1,6 +1,11 @@
 spring:
   application:
     name: channel-simulator
+  cloud:
+    nacos:
+      config:
+        import-check:
+          enabled: false
 
 server:
   port: ${CHANNEL_SIMULATOR_PORT:8081}
