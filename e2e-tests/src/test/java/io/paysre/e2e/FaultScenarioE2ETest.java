@@ -24,11 +24,22 @@ import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.MethodOrderer;
+import org.junit.jupiter.api.TestMethodOrder;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
+/**
+ * Replays every scenario in the fault library against the full compose
+ * stack: fault injection, telemetry ingestion, evidence-backed
+ * investigation, four-eyes remediation and incident resolution. Resolving
+ * each incident is what lets the next scenario reuse the same channel
+ * without aggregating into the previous incident.
+ */
 @EnabledIfEnvironmentVariable(named = "PAY_SRE_COMPOSE_E2E", matches = "true")
-class ChannelTimeoutButSuccessE2ETest {
+@TestMethodOrder(MethodOrderer.MethodName.class)
+class FaultScenarioE2ETest {
 
     private static final Duration INGESTION_TIMEOUT = Duration.ofSeconds(90);
     private static final String CHANNEL_BASE_URL = environment(
@@ -50,11 +61,14 @@ class ChannelTimeoutButSuccessE2ETest {
             .build();
     private String lastLokiResponse = "<not queried>";
 
-    @Test
-    void provesAnAuditedMetricLogTraceInvestigationOfALostChannelResponse()
-            throws Exception {
-        var groundTruth = ScenarioGroundTruth.load(
-                "/fault-scenarios/channel-timeout-but-success-v1.yaml");
+    @ParameterizedTest
+    @ValueSource(strings = {
+        "/fault-scenarios/channel-timeout-but-success-v1.yaml",
+        "/fault-scenarios/channel-timeout-but-failed-v1.yaml"
+    })
+    void provesInvestigationRemediationAndResolutionOfALostChannelResponse(
+            String scenarioResource) throws Exception {
+        var groundTruth = ScenarioGroundTruth.load(scenarioResource);
         Instant startedAt = Instant.now();
         installFault(groundTruth, startedAt);
         var paymentIds = createUnknownPayments(groundTruth);
@@ -88,6 +102,52 @@ class ChannelTimeoutButSuccessE2ETest {
                 groundTruth.traffic().payments());
         assertConclusionAndGroundTruth(
                 groundTruth, conclusion, evidenceByType.keySet(), evidenceIndex.size());
+        remediateAndResolve(groundTruth, incidentId, paymentIds);
+    }
+
+    private void remediateAndResolve(
+            ScenarioGroundTruth groundTruth,
+            String incidentId,
+            List<String> paymentIds) throws Exception {
+        var proposal = postJson(
+                controlUri("/api/incidents/" + incidentId + "/runbook-executions"),
+                objectMapper.createObjectNode()
+                        .put("runbook", "query-and-sync-unknown-payments")
+                        .put("requestedBy", "sre-primary"),
+                202);
+        assertThat(proposal.path("status").asText()).isEqualTo("PENDING_APPROVAL");
+
+        var executed = postJson(
+                controlUri("/api/incidents/" + incidentId
+                        + "/runbook-executions/" + proposal.path("executionId").asText()
+                        + "/approval"),
+                objectMapper.createObjectNode().put("approver", "sre-secondary"),
+                200);
+        assertThat(executed.path("result").path("synced").asInt())
+                .withFailMessage("runbook result did not sync every payment: %s",
+                        executed.toString())
+                .isEqualTo(groundTruth.traffic().payments());
+
+        var paymentStatuses = new ArrayList<String>();
+        for (var paymentId : paymentIds) {
+            paymentStatuses.add(getJson(
+                    paymentUri("/api/payments/" + paymentId), 200)
+                    .path("status").asText());
+        }
+        var score = new ScenarioEvaluator().evaluateRemediation(
+                groundTruth.expected().remediation(),
+                new ScenarioEvaluator.ActualRemediation(
+                        executed.path("status").asText(), paymentStatuses));
+        assertThat(score.passed())
+                .withFailMessage("remediation score failed: execution=%s statuses=%s",
+                        executed.path("status").asText(), paymentStatuses)
+                .isTrue();
+
+        var resolved = postJson(
+                controlUri("/api/incidents/" + incidentId + "/resolution"),
+                objectMapper.createObjectNode().put("resolvedBy", "sre-primary"),
+                200);
+        assertThat(resolved.path("status").asText()).isEqualTo("RESOLVED");
     }
 
     private void assertEvidenceChain(
