@@ -51,6 +51,15 @@ class RootCausePolicyCatalogTest {
     }
 
     @Test
+    void defaultsExposeTheCallbackLostAdvisoryPolicy() {
+        var catalog = RootCausePolicyCatalog.defaults();
+        var policy = catalog.forRootCause(RootCauseCode.CHANNEL_CALLBACK_LOST);
+
+        assertThat(policy.allowedRunbooks()).isEmpty();
+        assertThat(policy.requiresHumanReview()).isTrue();
+    }
+
+    @Test
     void describeProducesDeterministicPolicySummary() {
         var description = RootCausePolicyCatalog.defaults().describe();
 
@@ -64,6 +73,10 @@ class RootCausePolicyCatalogTest {
                         + "requiresHumanReview=true");
         assertThat(description).contains(
                 "- rootCause=CHANNEL_CODE_MAPPING_ERROR, "
+                        + "allowedRunbooks=[], "
+                        + "requiresHumanReview=true");
+        assertThat(description).contains(
+                "- rootCause=CHANNEL_CALLBACK_LOST, "
                         + "allowedRunbooks=[], "
                         + "requiresHumanReview=true");
     }

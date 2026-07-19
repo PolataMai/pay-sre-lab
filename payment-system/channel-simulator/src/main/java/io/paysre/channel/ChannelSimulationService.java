@@ -1,5 +1,6 @@
 package io.paysre.channel;
 
+import io.paysre.contracts.ChannelCallback;
 import io.paysre.contracts.ChannelPaymentRequest;
 import io.paysre.contracts.ChannelPaymentResponse;
 import io.paysre.contracts.ChannelResult;
@@ -8,6 +9,8 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,6 +25,8 @@ public final class ChannelSimulationService {
     private final ChannelMetrics metrics;
     private final ChannelTelemetry telemetry;
     private final Map<String, ChannelPaymentResponse> finalStates = new ConcurrentHashMap<>();
+    private final Map<String, ChannelCallback> callbacks = new ConcurrentHashMap<>();
+    private final Set<String> duplicateCallbackKeys = ConcurrentHashMap.newKeySet();
 
     public ChannelSimulationService(
             FaultRuleRepository rules,
@@ -86,11 +91,9 @@ public final class ChannelSimulationService {
                     ChannelResult.FAILED, "51");
             case DECLINE_ALL -> new ChannelOutcome(
                     ChannelResult.FAILED, "05");
-            case NONE -> new ChannelOutcome(ChannelResult.SUCCESS, "00");
+            case CALLBACK_LOST, CALLBACK_DUPLICATED, NONE -> new ChannelOutcome(
+                    ChannelResult.SUCCESS, "00");
         };
-    }
-
-    private record ChannelOutcome(ChannelResult result, String channelCode) {
     }
 
     private Duration elapsed(Instant started) {
@@ -118,5 +121,48 @@ public final class ChannelSimulationService {
             throw new ChannelPaymentNotFoundException(paymentId);
         }
         return response;
+    }
+
+    public Optional<ChannelCallback> ingestCallback(ChannelCallback callback) {
+        Objects.requireNonNull(callback, "callback");
+        var activeFault = rules.findActive(callback.channel(), clock.instant())
+                .map(FaultRule::type)
+                .orElse(FaultType.NONE);
+        if (activeFault == FaultType.CALLBACK_LOST) {
+            LOGGER.atWarn()
+                    .addKeyValue("event", "CHANNEL_CALLBACK_DROPPED")
+                    .addKeyValue("paymentId", callback.paymentId())
+                    .addKeyValue("channel", callback.channel())
+                    .log("Channel callback dropped by fault rule");
+            metrics.recordRequest(callback.channel(), "CALLBACK_DROPPED", Duration.ZERO);
+            return Optional.empty();
+        }
+        String key = callback.paymentId() + ":" + callback.sequenceNumber();
+        boolean duplicate;
+        if (activeFault == FaultType.CALLBACK_DUPLICATED) {
+            duplicate = !duplicateCallbackKeys.add(key);
+            if (duplicate) {
+                callbacks.put(callback.callbackId() + ":duplicate", callback);
+                LOGGER.atWarn()
+                        .addKeyValue("event", "CHANNEL_CALLBACK_DUPLICATED")
+                        .addKeyValue("paymentId", callback.paymentId())
+                        .addKeyValue("channel", callback.channel())
+                        .log("Channel callback duplicated by fault rule");
+                metrics.recordRequest(callback.channel(), "CALLBACK_DUPLICATED", Duration.ZERO);
+                return Optional.of(callback);
+            }
+        }
+        callbacks.put(callback.callbackId(), callback);
+        metrics.recordRequest(callback.channel(), "CALLBACK_ACCEPTED", Duration.ZERO);
+        LOGGER.atInfo()
+                .addKeyValue("event", "CHANNEL_CALLBACK_ACCEPTED")
+                .addKeyValue("paymentId", callback.paymentId())
+                .addKeyValue("channel", callback.channel())
+                .addKeyValue("sequenceNumber", callback.sequenceNumber())
+                .log("Channel callback accepted");
+        return Optional.of(callback);
+    }
+
+    private record ChannelOutcome(ChannelResult result, String channelCode) {
     }
 }

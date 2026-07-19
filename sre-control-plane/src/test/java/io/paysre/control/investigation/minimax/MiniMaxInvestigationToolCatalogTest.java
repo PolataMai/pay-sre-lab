@@ -85,6 +85,7 @@ class MiniMaxInvestigationToolCatalogTest {
 
         assertThat(toStringList(rootCauseEnum))
                 .containsExactly(
+                        "CHANNEL_CALLBACK_LOST",
                         "CHANNEL_CODE_MAPPING_ERROR",
                         "CHANNEL_DECLINE_SPIKE",
                         "CHANNEL_TIMEOUT_RESPONSE_LOST");
