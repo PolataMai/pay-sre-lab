@@ -209,7 +209,7 @@ flowchart TD
 docker compose -f deploy/compose.yaml up -d --build --wait
 
 PAY_SRE_COMPOSE_E2E=true mvn -B -ntp -pl e2e-tests -am \
-  -Dtest=ChannelTimeoutButSuccessE2ETest \
+  -Dtest=FaultScenarioE2ETest \
   -Dsurefire.failIfNoSpecifiedTests=false test
 
 docker compose -f deploy/compose.yaml down -v --remove-orphans

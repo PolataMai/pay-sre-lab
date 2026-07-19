@@ -82,17 +82,25 @@ docker compose -f deploy/compose.yaml up -d --build --wait
 docker compose -f deploy/compose.yaml down -v --remove-orphans
 ```
 
-## 可重复场景
+## 故障目录与可重复场景
 
-Ground Truth 位于 [`fault-scenarios/channel-timeout-but-success-v1.yaml`](fault-scenarios/channel-timeout-but-success-v1.yaml)：
+故障目录位于 [`fault-scenarios/`](fault-scenarios/)，每个 YAML 自带固定随机种子、流量和 Ground Truth（含调查期望与处置期望），由 `FaultScenarioE2ETest` 参数化回放。
 
-1. 对 `CHANNEL_A` 安装概率为 100% 的 `TIMEOUT_BUT_SUCCESS` 规则。
-2. 创建 5 笔 CNY 10.00 的合成支付。
-3. 支付本地状态全部进入 `UNKNOWN`，渠道最终状态全部为 `SUCCESS`。
-4. Alertmanager Webhook 创建并聚合 Incident。
-5. 等待 Prometheus、Loki、Tempo 摄入，再创建并调查 Incident。
-6. 调查器按固定顺序查询 UNKNOWN 指标、状态日志、分布式 Trace、支付时间线、渠道终态和影响面。
-7. 结论必须识别 `CHANNEL_TIMEOUT_RESPONSE_LOST`，引用六类 Evidence，并建议 `query-and-sync-unknown-payments`。
+| 场景 | 渠道故障 | 渠道终态 | 最终支付状态 | Ground Truth |
+|---|---|---|---|---|
+| `channel-timeout-but-success-v1` | `TIMEOUT_BUT_SUCCESS` | `SUCCESS` | `SUCCESS` | [YAML](fault-scenarios/channel-timeout-but-success-v1.yaml) |
+| `channel-timeout-but-failed-v1` | `TIMEOUT_BUT_FAILED` | `FAILED` | `FAILED` | [YAML](fault-scenarios/channel-timeout-but-failed-v1.yaml) |
+
+两个场景共享同一条调查-处置-关单链路：
+
+1. 对 `CHANNEL_A` 安装概率为 100% 的渠道故障规则（同根因：响应丢失）。
+2. 创建 5 笔 CNY 10.00 的合成支付，本地状态全部进入 `UNKNOWN`，渠道最终态由故障类型决定（SUCCESS 或 FAILED）。
+3. Alertmanager Webhook 创建并聚合 Incident。
+4. 等待 Prometheus、Loki、Tempo 摄入，再创建并调查 Incident。
+5. 调查器按固定顺序查询 UNKNOWN 指标、状态日志、分布式 Trace、支付时间线、渠道终态和影响面。
+6. 结论必须识别 `CHANNEL_TIMEOUT_RESPONSE_LOST`，引用六类 Evidence，并建议 `query-and-sync-unknown-payments`（两个场景结论相同，落地终态由渠道决定）。
+7. 处置走四眼审批：`sre-primary` 提案 → `sre-secondary` 审批 → Runbook 执行并审计。`ScenarioEvaluator` 对根因、证据召回、推荐 Runbook、人工复核策略与处置结果统一评分（终态验收：SUCCESS 场景收敛到 `SUCCESS`、FAILED 场景收敛到 `FAILED`）。
+8. 通过评分后 `POST /api/incidents/{id}/resolution` 关单，把 Incident 推进到 `RESOLVED`，下一个场景复用同一条渠道不会与上一个 Incident 聚合。
 
 只运行评分与部署结构测试：
 
@@ -106,11 +114,11 @@ mvn -pl e2e-tests -am test \
 
 ```bash
 PAY_SRE_COMPOSE_E2E=true mvn -B -ntp -pl e2e-tests -am \
-  -Dtest=ChannelTimeoutButSuccessE2ETest \
+  -Dtest=FaultScenarioE2ETest \
   -Dsurefire.failIfNoSpecifiedTests=false test
 ```
 
-测试会在 90 秒上限内轮询摄入状态，验证 UNKNOWN Gauge 不含交易 ID Label、状态日志携带 `CHANNEL_TIMEOUT` 和 TraceId、同一 Trace 含支付/渠道 Span、六类 Evidence 哈希可重算，并验证每次工具调用都有审计记录。
+测试会在 90 秒上限内轮询摄入状态，对每个场景验证：UNKNOWN Gauge 不含交易 ID Label、状态日志携带 `CHANNEL_TIMEOUT` 和 TraceId、同一 Trace 含支付/渠道 Span、六类 Evidence 哈希可重算、每次工具调用都有审计记录，并断言处置终态与场景 Ground Truth 完全一致、Incident 关单成功。
 
 ## 接入真实模型（MiniMax）
 

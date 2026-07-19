@@ -32,7 +32,7 @@ jobs:
           PAY_SRE_COMPOSE_E2E: "true"
         run: >-
           mvn -B -ntp -pl e2e-tests -am
-          -Dtest=ChannelTimeoutButSuccessE2ETest
+          -Dtest=FaultScenarioE2ETest
           -Dsurefire.failIfNoSpecifiedTests=false test
       - name: Capture Compose diagnostics
         if: failure()
