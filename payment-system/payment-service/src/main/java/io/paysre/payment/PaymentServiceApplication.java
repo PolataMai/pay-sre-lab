@@ -100,12 +100,8 @@ public class PaymentServiceApplication {
     @Bean
     ChannelReturnCodeMapping channelReturnCodeMapping(
             @Value("${paysre.channel.code-mapping.success-codes:00}") String successCodes,
-            @Value("${paysre.channel.code-mapping.failure-codes:51,05,96}") String failureCodes,
-            @Value("${paysre.channel.code-mapping.fallback-result:FAILED}") String fallback) {
-        return new ChannelReturnCodeMapping.Fixed(
-                csv(successCodes),
-                csv(failureCodes),
-                io.paysre.contracts.ChannelResult.valueOf(fallback));
+            @Value("${paysre.channel.code-mapping.failure-codes:51,05,96}") String failureCodes) {
+        return new ChannelReturnCodeMapping.Fixed(csv(successCodes), csv(failureCodes));
     }
 
     private static java.util.Set<String> csv(String csv) {

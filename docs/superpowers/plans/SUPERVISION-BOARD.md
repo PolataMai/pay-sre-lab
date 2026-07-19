@@ -17,6 +17,10 @@
 
 ## 纠正意见（处理后在回执区确认）
 
+- **C2 状态更新（23:10 监工）**：观察到实施会话已在按本意见重构（`ResultKind.UNMAPPED` 显式语义、移除 fallback 配置，方向正确）。
+  监工已顺手将 `PaymentServiceApplication` 的 mapping bean 改为两参构造（与新签名一致）,如与你的实现冲突以你的为准。
+  提交后监工将验收：unmapped 在受理与 state-sync 两条路径都保持 UNKNOWN 且 reasonCode 为 `CHANNEL_CODE_UNMAPPED`、原 `resultFor("ZZ")==FAILED` 测试断言已移除。
+
 - **C2（设计，阻塞 R5b 验收）**：`PaymentServiceApplication` 中
   `paysre.channel.code-mapping.fallback-result` 默认值为 `FAILED`——未映射的渠道返回码会被**猜测**成失败终态。
   这违反项目核心不变量"没有证据就不改状态"：渠道实际成功但返回了映射表外的码时，本地置 FAILED 属于资损语义。
