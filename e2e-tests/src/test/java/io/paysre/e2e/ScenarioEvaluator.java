@@ -24,6 +24,14 @@ final class ScenarioEvaluator {
                 expected.requiresHumanReview() == actual.requiresHumanReview());
     }
 
+    RemediationScore evaluateRemediation(
+            ScenarioGroundTruth.Remediation expected, ActualRemediation actual) {
+        return new RemediationScore(
+                expected.runbookExecutionStatus().equals(actual.runbookExecutionStatus()),
+                actual.paymentStatuses().stream()
+                        .allMatch(expected.finalPaymentStatus()::equals));
+    }
+
     record ActualInvestigation(
             String rootCause,
             Set<String> evidenceTypes,
@@ -33,6 +41,15 @@ final class ScenarioEvaluator {
 
         ActualInvestigation {
             evidenceTypes = Set.copyOf(evidenceTypes);
+        }
+    }
+
+    record ActualRemediation(
+            String runbookExecutionStatus,
+            java.util.List<String> paymentStatuses) {
+
+        ActualRemediation {
+            paymentStatuses = java.util.List.copyOf(paymentStatuses);
         }
     }
 }
@@ -50,5 +67,14 @@ record ScenarioScore(
                 && minimumEvidenceCountMet
                 && runbookCorrect
                 && humanReviewCorrect;
+    }
+}
+
+record RemediationScore(
+        boolean executionStatusCorrect,
+        boolean allPaymentsConverged) {
+
+    boolean passed() {
+        return executionStatusCorrect && allPaymentsConverged;
     }
 }

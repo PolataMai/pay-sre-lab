@@ -49,6 +49,46 @@ class ScenarioEvaluatorTest {
     }
 
     @Test
+    void loadsTheTimeoutButFailedScenarioWithItsRemediationGroundTruth() {
+        var groundTruth = ScenarioGroundTruth.load(
+                "/fault-scenarios/channel-timeout-but-failed-v1.yaml");
+
+        assertThat(groundTruth.id()).isEqualTo("channel-timeout-but-failed-v1");
+        assertThat(groundTruth.fault().type()).isEqualTo("TIMEOUT_BUT_FAILED");
+        assertThat(groundTruth.expected().rootCause())
+                .isEqualTo("CHANNEL_TIMEOUT_RESPONSE_LOST");
+        assertThat(groundTruth.expected().remediation().runbookExecutionStatus())
+                .isEqualTo("SUCCEEDED");
+        assertThat(groundTruth.expected().remediation().finalPaymentStatus())
+                .isEqualTo("FAILED");
+    }
+
+    @Test
+    void remediationPassesOnlyWhenExecutionAndEveryPaymentConverge() {
+        var expected = ScenarioGroundTruth.load(
+                "/fault-scenarios/channel-timeout-but-failed-v1.yaml")
+                .expected().remediation();
+        var evaluator = new ScenarioEvaluator();
+
+        var pass = evaluator.evaluateRemediation(expected,
+                new ScenarioEvaluator.ActualRemediation(
+                        "SUCCEEDED", java.util.List.of("FAILED", "FAILED")));
+        assertThat(pass.passed()).isTrue();
+
+        var wrongStatus = evaluator.evaluateRemediation(expected,
+                new ScenarioEvaluator.ActualRemediation(
+                        "SUCCEEDED", java.util.List.of("FAILED", "UNKNOWN")));
+        assertThat(wrongStatus.allPaymentsConverged()).isFalse();
+        assertThat(wrongStatus.passed()).isFalse();
+
+        var failedExecution = evaluator.evaluateRemediation(expected,
+                new ScenarioEvaluator.ActualRemediation(
+                        "FAILED", java.util.List.of("FAILED")));
+        assertThat(failedExecution.executionStatusCorrect()).isFalse();
+        assertThat(failedExecution.passed()).isFalse();
+    }
+
+    @Test
     void reportsPartialEvidenceRecallToFourDecimalPlaces() {
         var expected = ScenarioGroundTruth.load(
                 "/fault-scenarios/channel-timeout-but-success-v1.yaml").expected();

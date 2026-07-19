@@ -21,3 +21,6 @@ expected:
     - INCIDENT_IMPACT
   recommendedRunbook: query-and-sync-unknown-payments
   requiresHumanReview: true
+  remediation:
+    runbookExecutionStatus: SUCCEEDED
+    finalPaymentStatus: SUCCESS

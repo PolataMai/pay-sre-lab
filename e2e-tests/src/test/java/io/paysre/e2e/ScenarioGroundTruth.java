@@ -63,12 +63,16 @@ record ScenarioGroundTruth(
         if (!(required instanceof List<?> items)) {
             throw new IllegalArgumentException("requiredEvidenceTypes must be a list");
         }
+        var remediation = map(values, "remediation");
         return new Expected(
                 string(values, "rootCause"),
                 number(values, "minimumEvidenceCount").intValueExact(),
                 items.stream().map(String::valueOf).toList(),
                 string(values, "recommendedRunbook"),
-                booleanValue(values, "requiresHumanReview"));
+                booleanValue(values, "requiresHumanReview"),
+                new Remediation(
+                        string(remediation, "runbookExecutionStatus"),
+                        string(remediation, "finalPaymentStatus")));
     }
 
     @SuppressWarnings("unchecked")
@@ -119,10 +123,15 @@ record ScenarioGroundTruth(
             int minimumEvidenceCount,
             List<String> requiredEvidenceTypes,
             String recommendedRunbook,
-            boolean requiresHumanReview) {
+            boolean requiresHumanReview,
+            Remediation remediation) {
 
         Expected {
             requiredEvidenceTypes = List.copyOf(requiredEvidenceTypes);
+            Objects.requireNonNull(remediation, "remediation");
         }
+    }
+
+    record Remediation(String runbookExecutionStatus, String finalPaymentStatus) {
     }
 }
