@@ -128,6 +128,39 @@ class ActionGuardTest {
         assertThat(audits.records.get(audits.records.size() - 1).allowed()).isTrue();
     }
 
+    @Test
+    void resolutionIsAllowedForMitigatedAndNeedsHumanIncidents() {
+        var mitigated = actionableIncident();
+        mitigated.markMitigated(NOW.plusSeconds(3));
+        when(incidents.findById("INC-1")).thenReturn(Optional.of(mitigated));
+
+        assertThat(guard.authorizeResolution("INC-1", "operator-a").incidentId())
+                .isEqualTo("INC-1");
+
+        var needsHuman = actionableIncident();
+        needsHuman.markNeedsHuman(NOW.plusSeconds(3));
+        when(incidents.findById("INC-1")).thenReturn(Optional.of(needsHuman));
+
+        assertThat(guard.authorizeResolution("INC-1", "operator-a").status())
+                .isEqualTo(io.paysre.control.incident.IncidentStatus.NEEDS_HUMAN);
+    }
+
+    @Test
+    void resolutionIsDeniedWhileTheIncidentIsStillBeingWorked() {
+        when(incidents.findById("INC-1")).thenReturn(Optional.of(actionableIncident()));
+
+        assertDenied(
+                () -> guard.authorizeResolution("INC-1", "operator-a"),
+                "INCIDENT_NOT_RESOLVABLE");
+    }
+
+    @Test
+    void resolutionRequiresANamedHuman() {
+        assertDenied(
+                () -> guard.authorizeResolution("INC-1", ""),
+                "ACTOR_REQUIRED");
+    }
+
     private void assertDenied(Runnable call, String code) {
         assertThatThrownBy(call::run)
                 .isInstanceOf(ActionDeniedException.class)

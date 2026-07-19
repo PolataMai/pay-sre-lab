@@ -110,6 +110,27 @@ public final class ActionGuard {
         return execution;
     }
 
+    public Incident authorizeResolution(String incidentId, String resolvedBy) {
+        var action = "INCIDENT_RESOLVED";
+        if (resolvedBy == null || resolvedBy.isBlank()) {
+            throw denied(incidentId, null, action, "anonymous", "ACTOR_REQUIRED",
+                    "an incident resolution requires a named human");
+        }
+        var incident = incidentRepository.findById(incidentId).orElse(null);
+        if (incident == null) {
+            throw denied(incidentId, null, action, resolvedBy, "INCIDENT_NOT_FOUND",
+                    "incident does not exist: " + incidentId);
+        }
+        if (incident.status() != IncidentStatus.MITIGATED
+                && incident.status() != IncidentStatus.NEEDS_HUMAN) {
+            throw denied(incidentId, null, action, resolvedBy, "INCIDENT_NOT_RESOLVABLE",
+                    "only mitigated or needs-human incidents can be resolved, was "
+                            + incident.status());
+        }
+        audit(incidentId, null, action, resolvedBy, true, null);
+        return incident;
+    }
+
     public void recordExecutionOutcome(
             RunbookExecution execution, boolean successful, String reasonCode) {
         audit(
