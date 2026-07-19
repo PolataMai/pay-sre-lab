@@ -250,7 +250,7 @@ services:
       dockerfile: deploy/Dockerfile
       args:
         SERVICE_MODULE: sre-control-plane
-        JAR_FILE: sre-control-plane/target/sre-control-plane-0.1.0-SNAPSHOT.jar
+        JAR_FILE: sre-control-plane/target/sre-control-plane-0.1.0-SNAPSHOT-exec.jar
     environment:
       CONTROL_PLANE_PORT: 8082
       CONTROL_DB_URL: jdbc:postgresql://control-db:5432/paysre

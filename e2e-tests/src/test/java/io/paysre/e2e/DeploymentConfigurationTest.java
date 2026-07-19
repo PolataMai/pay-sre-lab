@@ -42,6 +42,11 @@ class DeploymentConfigurationTest {
             assertThat(map(services, service).get("networks").toString())
                     .contains("pay-sre");
         }
+        assertThat(map(map(map(services, "sre-control-plane"), "build"), "args")
+                        .get("JAR_FILE").toString())
+                .as("sre-control-plane deploys the Boot exec jar; its plain jar exists "
+                        + "only so sibling modules can compile against it")
+                .endsWith("-exec.jar");
         assertThat(map(services, "prometheus").get("image"))
                 .isEqualTo("prom/prometheus:v3.12.0");
         assertThat(map(services, "loki").get("image"))
