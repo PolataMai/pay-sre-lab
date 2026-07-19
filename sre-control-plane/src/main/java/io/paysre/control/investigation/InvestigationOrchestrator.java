@@ -118,7 +118,15 @@ public final class InvestigationOrchestrator {
                 try {
                     var validated = validator.validate(incident, conclude.conclusion());
                     conclusionRepository.save(validated);
-                    incident.markMitigationProposed(clock.instant());
+                    // Advisory conclusions recommend no runbook; jump
+                    // straight to MITIGATED so the human-resolve path
+                    // can close the incident without a proposal.
+                    if (validated.recommendedRunbook() == null
+                            || validated.recommendedRunbook().isEmpty()) {
+                        incident.markMitigated(clock.instant());
+                    } else {
+                        incident.markMitigationProposed(clock.instant());
+                    }
                     incidentRepository.save(incident);
                     LOGGER.atInfo()
                             .addKeyValue("event", "INCIDENT_INVESTIGATION_COMPLETED")

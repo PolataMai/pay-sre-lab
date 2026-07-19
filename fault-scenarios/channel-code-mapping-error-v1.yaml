@@ -1,0 +1,23 @@
+id: channel-code-mapping-error-v1
+seed: 20260719
+fault:
+  channel: CHANNEL_A
+  type: NONE
+  probability: 1.00
+  activeFor: PT2M
+traffic:
+  payments: 5
+  amount: "10.00"
+  currency: CNY
+expected:
+  rootCause: CHANNEL_CODE_MAPPING_ERROR
+  advisory: true
+  minimumEvidenceCount: 4
+  requiredEvidenceTypes:
+    - SERVICE_METRICS
+    - STRUCTURED_LOGS
+    - PAYMENT_TIMELINE
+    - CHANNEL_FINAL_STATE
+    - INCIDENT_IMPACT
+  recommendedRunbook: ""
+  requiresHumanReview: true

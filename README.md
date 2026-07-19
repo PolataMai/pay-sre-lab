@@ -86,10 +86,12 @@ docker compose -f deploy/compose.yaml down -v --remove-orphans
 
 故障目录位于 [`fault-scenarios/`](fault-scenarios/)，每个 YAML 自带固定随机种子、流量和 Ground Truth（含调查期望与处置期望），由 `FaultScenarioE2ETest` 参数化回放。
 
-| 场景 | 渠道故障 | 渠道终态 | 最终支付状态 | Ground Truth |
-|---|---|---|---|---|
-| `channel-timeout-but-success-v1` | `TIMEOUT_BUT_SUCCESS` | `SUCCESS` | `SUCCESS` | [YAML](fault-scenarios/channel-timeout-but-success-v1.yaml) |
-| `channel-timeout-but-failed-v1` | `TIMEOUT_BUT_FAILED` | `FAILED` | `FAILED` | [YAML](fault-scenarios/channel-timeout-but-failed-v1.yaml) |
+| 场景 | 渠道故障 | 渠道终态 | 最终支付状态 | 类型 | Ground Truth |
+|---|---|---|---|---|---|
+| `channel-timeout-but-success-v1` | `TIMEOUT_BUT_SUCCESS` | `SUCCESS` | `SUCCESS` | 受控处置 | [YAML](fault-scenarios/channel-timeout-but-success-v1.yaml) |
+| `channel-timeout-but-failed-v1` | `TIMEOUT_BUT_FAILED` | `FAILED` | `FAILED` | 受控处置 | [YAML](fault-scenarios/channel-timeout-but-failed-v1.yaml) |
+| `channel-decline-spike-v1` | `DECLINE_ALL` | `FAILED` | n/a | advisory（仅观察） | [YAML](fault-scenarios/channel-decline-spike-v1.yaml) |
+| `channel-code-mapping-error-v1` | `NONE`（配置侧） | n/a | n/a | advisory（仅观察） | [YAML](fault-scenarios/channel-code-mapping-error-v1.yaml) |
 
 两个场景共享同一条调查-处置-关单链路：
 
@@ -101,6 +103,8 @@ docker compose -f deploy/compose.yaml down -v --remove-orphans
 6. 结论必须识别 `CHANNEL_TIMEOUT_RESPONSE_LOST`，引用六类 Evidence，并建议 `query-and-sync-unknown-payments`（两个场景结论相同，落地终态由渠道决定）。
 7. 处置走四眼审批：`sre-primary` 提案 → `sre-secondary` 审批 → Runbook 执行并审计。`ScenarioEvaluator` 对根因、证据召回、推荐 Runbook、人工复核策略与处置结果统一评分（终态验收：SUCCESS 场景收敛到 `SUCCESS`、FAILED 场景收敛到 `FAILED`）。
 8. 通过评分后 `POST /api/incidents/{id}/resolution` 关单，把 Incident 推进到 `RESOLVED`，下一个场景复用同一条渠道不会与上一个 Incident 聚合。
+
+advisory 类场景（如 `channel-decline-spike-v1`）只走到调查评分——结论的 `recommendedRunbook` 为空，`ActionGuard` 以 `ADVISORY_NO_RUNBOOK` 拒绝任何 Runbook 提案，Incident 在调查后直接 `MITIGATED`、由人直接关单。
 
 只运行评分与部署结构测试：
 

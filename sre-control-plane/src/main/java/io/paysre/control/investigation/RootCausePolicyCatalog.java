@@ -32,7 +32,9 @@ public final class RootCausePolicyCatalog {
                 RootCauseCode.CHANNEL_TIMEOUT_RESPONSE_LOST,
                 new ChannelTimeoutResponseLostPolicy(),
                 RootCauseCode.CHANNEL_DECLINE_SPIKE,
-                new ChannelDeclineSpikePolicy()));
+                new ChannelDeclineSpikePolicy(),
+                RootCauseCode.CHANNEL_CODE_MAPPING_ERROR,
+                new ChannelCodeMappingErrorPolicy()));
     }
 
     public static Builder builder() {

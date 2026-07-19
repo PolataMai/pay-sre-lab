@@ -42,6 +42,15 @@ class RootCausePolicyCatalogTest {
     }
 
     @Test
+    void defaultsExposeTheCodeMappingErrorAdvisoryPolicy() {
+        var catalog = RootCausePolicyCatalog.defaults();
+        var policy = catalog.forRootCause(RootCauseCode.CHANNEL_CODE_MAPPING_ERROR);
+
+        assertThat(policy.allowedRunbooks()).isEmpty();
+        assertThat(policy.requiresHumanReview()).isTrue();
+    }
+
+    @Test
     void describeProducesDeterministicPolicySummary() {
         var description = RootCausePolicyCatalog.defaults().describe();
 
@@ -51,6 +60,10 @@ class RootCausePolicyCatalogTest {
                         + "requiresHumanReview=true");
         assertThat(description).contains(
                 "- rootCause=CHANNEL_DECLINE_SPIKE, "
+                        + "allowedRunbooks=[], "
+                        + "requiresHumanReview=true");
+        assertThat(description).contains(
+                "- rootCause=CHANNEL_CODE_MAPPING_ERROR, "
                         + "allowedRunbooks=[], "
                         + "requiresHumanReview=true");
     }
