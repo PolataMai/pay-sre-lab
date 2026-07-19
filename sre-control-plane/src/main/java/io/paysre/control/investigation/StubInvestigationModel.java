@@ -13,9 +13,16 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
+/**
+ * Deterministic investigation model used as the default in CI and
+ * regression tests. It walks the same six read-only gateway tools in
+ * a fixed order, then concludes with the root cause and runbook
+ * declared by the active {@link RootCausePolicy} — today
+ * {@link RootCauseCode#CHANNEL_TIMEOUT_RESPONSE_LOST}, tomorrow
+ * whatever the catalog registers next.
+ */
 public final class StubInvestigationModel implements InvestigationModel {
 
-    private static final String RUNBOOK = "query-and-sync-unknown-payments";
     private static final String METRICS_TOOL = "query_service_metrics";
     private static final String LOGS_TOOL = "search_structured_logs";
     private static final String TRACE_TOOL = "get_distributed_trace";
@@ -30,10 +37,23 @@ public final class StubInvestigationModel implements InvestigationModel {
 
     private final ObjectMapper objectMapper;
     private final Clock clock;
+    private final RootCausePolicyCatalog policies;
+    private final RootCauseCode targetRootCause;
 
     public StubInvestigationModel(ObjectMapper objectMapper, Clock clock) {
+        this(objectMapper, clock, RootCausePolicyCatalog.defaults(),
+                RootCauseCode.CHANNEL_TIMEOUT_RESPONSE_LOST);
+    }
+
+    public StubInvestigationModel(
+            ObjectMapper objectMapper,
+            Clock clock,
+            RootCausePolicyCatalog policies,
+            RootCauseCode targetRootCause) {
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
         this.clock = Objects.requireNonNull(clock, "clock");
+        this.policies = Objects.requireNonNull(policies, "policies");
+        this.targetRootCause = Objects.requireNonNull(targetRootCause, "targetRootCause");
     }
 
     @Override
@@ -217,15 +237,22 @@ public final class StubInvestigationModel implements InvestigationModel {
         var content = impact.content();
         var amount = content.path("totalAmount").decimalValue();
         var currency = Currency.getInstance(content.path("currency").asText());
+        var policy = policies.forRootCause(targetRootCause);
+        var runbooks = policy.allowedRunbooks();
+        if (runbooks.isEmpty()) {
+            throw new IllegalStateException(
+                    "stub model cannot conclude an advisory-only root cause: "
+                            + targetRootCause);
+        }
         var conclusion = new InvestigationConclusion(
                 context.incident().incidentId(),
-                RootCauseCode.CHANNEL_TIMEOUT_RESPONSE_LOST,
+                targetRootCause,
                 new BigDecimal("0.95"),
                 context.evidence().stream().map(item -> item.evidenceId()).toList(),
                 content.path("affectedPaymentCount").asLong(),
                 new Money(amount, currency),
-                RUNBOOK,
-                true);
+                runbooks.iterator().next(),
+                policy.requiresHumanReview());
         return new InvestigationDecision.Conclude(conclusion);
     }
 

@@ -10,6 +10,7 @@ import io.paysre.control.investigation.ConclusionValidator;
 import io.paysre.control.investigation.InvestigationConclusionRepository;
 import io.paysre.control.investigation.InvestigationModel;
 import io.paysre.control.investigation.InvestigationOrchestrator;
+import io.paysre.control.investigation.RootCausePolicyCatalog;
 import io.paysre.control.investigation.StubInvestigationModel;
 import io.paysre.control.investigation.minimax.HttpMiniMaxChatClient;
 import io.paysre.control.investigation.minimax.MiniMaxInvestigationModel;
@@ -254,7 +255,8 @@ public class ControlPlaneApplication {
                                 miniMaxModel,
                                 miniMaxTemperature,
                                 miniMaxMaxCompletionTokens),
-                        objectMapper);
+                        objectMapper,
+                        rootCausePolicyCatalog());
             }
             default -> throw new IllegalArgumentException(
                     "unsupported investigation model: " + modelMode);
@@ -263,7 +265,12 @@ public class ControlPlaneApplication {
 
     @Bean
     ConclusionValidator conclusionValidator(EvidenceRepository evidenceRepository) {
-        return new ConclusionValidator(evidenceRepository);
+        return new ConclusionValidator(evidenceRepository, rootCausePolicyCatalog());
+    }
+
+    @Bean
+    RootCausePolicyCatalog rootCausePolicyCatalog() {
+        return RootCausePolicyCatalog.defaults();
     }
 
     @Bean
