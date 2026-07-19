@@ -3,6 +3,7 @@ package io.paysre.payment;
 import io.paysre.payment.adapter.http.HttpChannelClient;
 import io.paysre.payment.application.ChannelClient;
 import io.paysre.payment.application.ChannelReturnCodeMapping;
+import io.paysre.payment.application.ChannelRouter;
 import io.paysre.payment.application.ChannelStateQuery;
 import io.paysre.payment.application.PaymentApplicationService;
 import io.paysre.payment.application.UnknownPaymentSyncService;
@@ -91,10 +92,31 @@ public class PaymentServiceApplication {
             Clock clock,
             PaymentMetrics metrics,
             PaymentTelemetry telemetry,
-            ChannelReturnCodeMapping returnCodeMapping) {
+            ChannelReturnCodeMapping returnCodeMapping,
+            ChannelRouter channelRouter) {
         return new PaymentApplicationService(
                 repository, channelClient, ids, clock, metrics, telemetry,
-                returnCodeMapping);
+                returnCodeMapping, channelRouter);
+    }
+
+    @Bean
+    ChannelRouter channelRouter(
+            @Value("${paysre.payment.routing.default-channel:CHANNEL_A}") String defaultChannel,
+            @Value("${paysre.payment.routing.merchant-overlays:}") String overlays) {
+        var map = new java.util.HashMap<String, String>();
+        if (overlays != null && !overlays.isBlank()) {
+            for (var entry : overlays.split(",")) {
+                var trimmed = entry.trim();
+                if (trimmed.isEmpty()) {
+                    continue;
+                }
+                var parts = trimmed.split(":", 2);
+                if (parts.length == 2 && !parts[0].isBlank() && !parts[1].isBlank()) {
+                    map.put(parts[0].trim(), parts[1].trim());
+                }
+            }
+        }
+        return new ChannelRouter.Static(defaultChannel, map);
     }
 
     @Bean

@@ -127,7 +127,9 @@ class PaymentApplicationServiceTest {
                 new PaymentTelemetry(OpenTelemetry.noop().getTracer("test")),
                 new ChannelReturnCodeMapping.Fixed(
                         java.util.Set.of("00"),
-                        java.util.Set.of("51", "05", "96")));
+                        java.util.Set.of("51", "05", "96")),
+                new io.paysre.payment.application.ChannelRouter.Static(
+                        "CHANNEL_A", java.util.Map.of()));
     }
 
     private AcceptPaymentCommand command(String idempotencyKey) {

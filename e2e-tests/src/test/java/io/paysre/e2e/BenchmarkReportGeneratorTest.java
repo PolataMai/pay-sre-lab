@@ -26,7 +26,8 @@ class BenchmarkReportGeneratorTest {
                 "/fault-scenarios/channel-timeout-but-failed-v1.yaml",
                 "/fault-scenarios/channel-decline-spike-v1.yaml",
                 "/fault-scenarios/channel-code-mapping-error-v1.yaml",
-                "/fault-scenarios/channel-callback-lost-v1.yaml")) {
+                "/fault-scenarios/channel-callback-lost-v1.yaml",
+                "/fault-scenarios/routing-misconfigured-v1.yaml")) {
             generator.recordScenario(ScenarioGroundTruth.load(resource));
         }
 
@@ -43,10 +44,12 @@ class BenchmarkReportGeneratorTest {
                 .contains("channel-decline-spike-v1")
                 .contains("channel-code-mapping-error-v1")
                 .contains("channel-callback-lost-v1")
+                .contains("routing-misconfigured-v1")
                 .contains("CHANNEL_TIMEOUT_RESPONSE_LOST")
                 .contains("CHANNEL_DECLINE_SPIKE")
                 .contains("CHANNEL_CODE_MAPPING_ERROR")
                 .contains("CHANNEL_CALLBACK_LOST")
+                .contains("ROUTING_MISCONFIGURED")
                 .contains("query-and-sync-unknown-payments");
     }
 }

@@ -36,7 +36,9 @@ public final class RootCausePolicyCatalog {
                 RootCauseCode.CHANNEL_CODE_MAPPING_ERROR,
                 new ChannelCodeMappingErrorPolicy(),
                 RootCauseCode.CHANNEL_CALLBACK_LOST,
-                new ChannelCallbackLostPolicy()));
+                new ChannelCallbackLostPolicy(),
+                RootCauseCode.ROUTING_MISCONFIGURED,
+                new RoutingMisconfiguredPolicy()));
     }
 
     public static Builder builder() {

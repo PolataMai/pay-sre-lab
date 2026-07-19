@@ -1,7 +1,7 @@
 # PaySRE Benchmark — Stub Model Baseline
 
 Generator: BenchmarkReportGenerator v1
-Scenarios: 5
+Scenarios: 6
 Model: StubInvestigationModel (deterministic; see `docs/superpowers/specs/2026-07-17-minimax-investigation-model-design.md` for the real-model counterpart).
 
 ## Per-scenario ground truth
@@ -13,6 +13,7 @@ Model: StubInvestigationModel (deterministic; see `docs/superpowers/specs/2026-0
 | channel-decline-spike-v1 | `DECLINE_ALL` | `CHANNEL_DECLINE_SPIKE` | ChannelDeclineSpikePolicy | [] | yes | yes | 4 | — |
 | channel-code-mapping-error-v1 | `NONE` | `CHANNEL_CODE_MAPPING_ERROR` | ChannelCodeMappingErrorPolicy | [] | yes | yes | 4 | — |
 | channel-callback-lost-v1 | `CALLBACK_LOST` | `CHANNEL_CALLBACK_LOST` | ChannelCallbackLostPolicy | [] | yes | yes | 3 | — |
+| routing-misconfigured-v1 | `NONE` | `ROUTING_MISCONFIGURED` | RoutingMisconfiguredPolicy | [] | yes | yes | 3 | — |
 
 ## Catalogue policies in use
 
@@ -21,6 +22,7 @@ Model: StubInvestigationModel (deterministic; see `docs/superpowers/specs/2026-0
 - rootCause=CHANNEL_DECLINE_SPIKE, allowedRunbooks=[], requiresHumanReview=true
 - rootCause=CHANNEL_CODE_MAPPING_ERROR, allowedRunbooks=[], requiresHumanReview=true
 - rootCause=CHANNEL_CALLBACK_LOST, allowedRunbooks=[], requiresHumanReview=true
+- rootCause=ROUTING_MISCONFIGURED, allowedRunbooks=[], requiresHumanReview=true
 ```
 
 ## Notes

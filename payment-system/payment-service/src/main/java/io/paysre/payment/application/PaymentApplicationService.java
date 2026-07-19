@@ -23,6 +23,7 @@ public final class PaymentApplicationService {
     private final PaymentMetrics metrics;
     private final PaymentTelemetry telemetry;
     private final ChannelReturnCodeMapping returnCodeMapping;
+    private final ChannelRouter router;
 
     public PaymentApplicationService(
             PaymentRepository repository,
@@ -31,7 +32,8 @@ public final class PaymentApplicationService {
             Clock clock,
             PaymentMetrics metrics,
             PaymentTelemetry telemetry,
-            ChannelReturnCodeMapping returnCodeMapping) {
+            ChannelReturnCodeMapping returnCodeMapping,
+            ChannelRouter router) {
         this.repository = Objects.requireNonNull(repository, "repository");
         this.channelClient = Objects.requireNonNull(channelClient, "channelClient");
         this.ids = Objects.requireNonNull(ids, "ids");
@@ -39,6 +41,7 @@ public final class PaymentApplicationService {
         this.metrics = Objects.requireNonNull(metrics, "metrics");
         this.telemetry = Objects.requireNonNull(telemetry, "telemetry");
         this.returnCodeMapping = Objects.requireNonNull(returnCodeMapping, "returnCodeMapping");
+        this.router = Objects.requireNonNull(router, "router");
     }
 
     public PaymentOrder accept(AcceptPaymentCommand command) {
@@ -55,7 +58,7 @@ public final class PaymentApplicationService {
                 command.merchantId(),
                 command.money(),
                 now);
-        payment.start("CHANNEL_A", "route-v1", now);
+        payment.start(router.selectChannel(command.merchantId()), "route-v1", now);
         var inserted = repository.save(payment, command.idempotencyKey());
         if (inserted != payment) {
             return inserted;

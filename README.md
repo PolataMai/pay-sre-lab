@@ -93,6 +93,7 @@ docker compose -f deploy/compose.yaml down -v --remove-orphans
 | `channel-decline-spike-v1` | `DECLINE_ALL` | `FAILED` | n/a | advisory（仅观察） | [YAML](fault-scenarios/channel-decline-spike-v1.yaml) |
 | `channel-code-mapping-error-v1` | `NONE`（配置侧） | n/a | n/a | advisory（仅观察） | [YAML](fault-scenarios/channel-code-mapping-error-v1.yaml) |
 | `channel-callback-lost-v1` | `CALLBACK_LOST` | `SUCCESS` | n/a | advisory（仅观察） | [YAML](fault-scenarios/channel-callback-lost-v1.yaml) |
+| `routing-misconfigured-v1` | `NONE`（配置侧） | n/a | n/a | advisory（仅观察） | [YAML](fault-scenarios/routing-misconfigured-v1.yaml) |
 
 两个场景共享同一条调查-处置-关单链路：
 

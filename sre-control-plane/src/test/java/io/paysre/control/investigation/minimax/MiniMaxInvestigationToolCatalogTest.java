@@ -88,7 +88,8 @@ class MiniMaxInvestigationToolCatalogTest {
                         "CHANNEL_CALLBACK_LOST",
                         "CHANNEL_CODE_MAPPING_ERROR",
                         "CHANNEL_DECLINE_SPIKE",
-                        "CHANNEL_TIMEOUT_RESPONSE_LOST");
+                        "CHANNEL_TIMEOUT_RESPONSE_LOST",
+                        "ROUTING_MISCONFIGURED");
         assertThat(toStringList(runbookEnum))
                 .containsExactly("query-and-sync-unknown-payments");
         assertThat(toBooleanList(reviewEnum)).containsExactly(true);
