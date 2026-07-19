@@ -55,24 +55,27 @@ public final class ChannelSimulationService {
 
     private ChannelPaymentResponse process(ChannelPaymentRequest request) {
         Instant now = Instant.now(clock);
+        var fault = rules.findActive(request.channel(), now)
+                .filter(rule -> rule.type() != FaultType.NONE)
+                .filter(rule -> decider.applies(request.paymentId(), rule))
+                .map(FaultRule::type)
+                .orElse(FaultType.NONE);
         var response = new ChannelPaymentResponse(
                 request.requestId(),
                 request.paymentId(),
-                ChannelResult.SUCCESS,
-                "00",
+                fault == FaultType.TIMEOUT_BUT_FAILED
+                        ? ChannelResult.FAILED
+                        : ChannelResult.SUCCESS,
+                fault == FaultType.TIMEOUT_BUT_FAILED ? "51" : "00",
                 now);
 
-        var rule = rules.findActive(request.channel(), now);
-        if (rule.isPresent()
-                && rule.get().type() == FaultType.TIMEOUT_BUT_SUCCESS
-                && decider.applies(request.paymentId(), rule.get())) {
-            finalStates.put(request.paymentId(), response);
-            logFinalState(request, response, true);
+        finalStates.put(request.paymentId(), response);
+        boolean responseLost = fault == FaultType.TIMEOUT_BUT_SUCCESS
+                || fault == FaultType.TIMEOUT_BUT_FAILED;
+        logFinalState(request, response, responseLost);
+        if (responseLost) {
             throw new ChannelTimeoutException(request.paymentId());
         }
-
-        finalStates.put(request.paymentId(), response);
-        logFinalState(request, response, false);
         return response;
     }
 

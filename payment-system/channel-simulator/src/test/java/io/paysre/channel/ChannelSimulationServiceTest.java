@@ -48,6 +48,31 @@ class ChannelSimulationServiceTest {
     }
 
     @Test
+    void timeoutCanAlsoHideAFailedFinalState() {
+        var rules = new InMemoryFaultRuleRepository();
+        rules.replace(new FaultRule(
+                "CHANNEL_A",
+                FaultType.TIMEOUT_BUT_FAILED,
+                new BigDecimal("1.00"),
+                NOW.minusSeconds(60),
+                NOW.plusSeconds(60),
+                20260717L));
+        var service = new ChannelSimulationService(
+                rules,
+                new FaultDecider(),
+                Clock.fixed(NOW, ZoneOffset.UTC),
+                new ChannelMetrics(new SimpleMeterRegistry()),
+                new ChannelTelemetry(OpenTelemetry.noop().getTracer("test")));
+
+        assertThatThrownBy(() -> service.pay(request("PAY-9")))
+                .isInstanceOf(ChannelTimeoutException.class);
+
+        var finalState = service.query("PAY-9");
+        assertThat(finalState.result()).isEqualTo(ChannelResult.FAILED);
+        assertThat(finalState.channelCode()).isEqualTo("51");
+    }
+
+    @Test
     void paymentSucceedsNormallyWhenNoFaultRuleIsActive() {
         var service = new ChannelSimulationService(
                 new InMemoryFaultRuleRepository(),
