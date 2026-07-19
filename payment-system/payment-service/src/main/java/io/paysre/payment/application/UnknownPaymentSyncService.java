@@ -69,13 +69,22 @@ public final class UnknownPaymentSyncService {
         if (response.result() == ChannelResult.TIMEOUT) {
             return Optional.of(stillUnknown(paymentId, ChannelResult.TIMEOUT));
         }
-        var mappedResult = returnCodeMapping.resultFor(response.channelCode());
-        if (mappedResult == ChannelResult.SUCCESS) {
-            payment.confirmUnknownSuccess(response.channelCode(), clock.instant());
-        } else if (mappedResult == ChannelResult.FAILED) {
-            payment.confirmUnknownFailure(response.channelCode(), clock.instant());
-        } else {
-            return Optional.of(stillUnknown(paymentId, mappedResult));
+        var mapped = returnCodeMapping.map(response.channelCode());
+        switch (mapped.kind()) {
+            case MAPPED_SUCCESS -> payment.confirmUnknownSuccess(
+                    response.channelCode(), clock.instant());
+            case MAPPED_FAILURE -> payment.confirmUnknownFailure(
+                    response.channelCode(), clock.instant());
+            case UNMAPPED -> {
+                payment.recordUnmappedCode(
+                        "CHANNEL_CODE_UNMAPPED", clock.instant());
+                return Optional.of(new PaymentSyncResult(
+                        paymentId,
+                        previous,
+                        payment.status(),
+                        mapped.channelResult(),
+                        PaymentSyncOutcome.STILL_UNKNOWN));
+            }
         }
 
         repository.save(payment, null);

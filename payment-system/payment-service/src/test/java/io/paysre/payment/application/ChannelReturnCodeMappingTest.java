@@ -13,34 +13,47 @@ class ChannelReturnCodeMappingTest {
     void classifiesConfiguredCodesBySetMembership() {
         var mapping = new ChannelReturnCodeMapping.Fixed(
                 Set.of("00"),
-                Set.of("51", "05", "96"),
-                ChannelResult.FAILED);
+                Set.of("51", "05", "96"));
 
-        assertThat(mapping.resultFor("00")).isEqualTo(ChannelResult.SUCCESS);
-        assertThat(mapping.resultFor("51")).isEqualTo(ChannelResult.FAILED);
-        assertThat(mapping.resultFor("05")).isEqualTo(ChannelResult.FAILED);
-        assertThat(mapping.resultFor("96")).isEqualTo(ChannelResult.FAILED);
-        assertThat(mapping.resultFor("ZZ")).isEqualTo(ChannelResult.FAILED);
+        assertThat(mapping.map("00").kind())
+                .isEqualTo(ChannelReturnCodeMapping.ResultKind.MAPPED_SUCCESS);
+        assertThat(mapping.map("00").channelResult()).isEqualTo(ChannelResult.SUCCESS);
+        assertThat(mapping.map("51").kind())
+                .isEqualTo(ChannelReturnCodeMapping.ResultKind.MAPPED_FAILURE);
+        assertThat(mapping.map("05").kind())
+                .isEqualTo(ChannelReturnCodeMapping.ResultKind.MAPPED_FAILURE);
+        assertThat(mapping.map("96").kind())
+                .isEqualTo(ChannelReturnCodeMapping.ResultKind.MAPPED_FAILURE);
     }
 
     @Test
-    void honoursFallbackForUnknownCodes() {
+    void unmappedCodesReturnUnmappedKindRatherThanGuessing() {
         var mapping = new ChannelReturnCodeMapping.Fixed(
                 Set.of("00"),
-                Set.of(),
-                ChannelResult.TIMEOUT);
+                Set.of("51"));
 
-        assertThat(mapping.resultFor("00")).isEqualTo(ChannelResult.SUCCESS);
-        assertThat(mapping.resultFor("??")).isEqualTo(ChannelResult.TIMEOUT);
+        assertThat(mapping.map("???").kind())
+                .isEqualTo(ChannelReturnCodeMapping.ResultKind.UNMAPPED);
+        assertThat(mapping.map("E9").kind())
+                .isEqualTo(ChannelReturnCodeMapping.ResultKind.UNMAPPED);
     }
 
     @Test
     void rejectsOverlappingSuccessAndFailureSets() {
         assertThatThrownBy(() -> new ChannelReturnCodeMapping.Fixed(
                 Set.of("00", "51"),
-                Set.of("51"),
-                ChannelResult.FAILED))
+                Set.of("51")))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("overlap");
+    }
+
+    @Test
+    void emptyFailureSetStillMarksUnmappedForUnknownCodes() {
+        var mapping = new ChannelReturnCodeMapping.Fixed(Set.of("00"), Set.of());
+
+        assertThat(mapping.map("00").kind())
+                .isEqualTo(ChannelReturnCodeMapping.ResultKind.MAPPED_SUCCESS);
+        assertThat(mapping.map("51").kind())
+                .isEqualTo(ChannelReturnCodeMapping.ResultKind.UNMAPPED);
     }
 }

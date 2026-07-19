@@ -50,8 +50,7 @@ class PaymentStructuredLoggingTest {
                 new PaymentTelemetry(OpenTelemetry.noop().getTracer("test")),
                 new ChannelReturnCodeMapping.Fixed(
                         java.util.Set.of("00"),
-                        java.util.Set.of("51", "05", "96"),
-                        io.paysre.contracts.ChannelResult.FAILED));
+                        java.util.Set.of("51", "05", "96")));
         var appender = capture(PaymentApplicationService.class);
         try {
             service.accept(new AcceptPaymentCommand(

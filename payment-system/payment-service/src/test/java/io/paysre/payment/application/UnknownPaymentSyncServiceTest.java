@@ -40,8 +40,7 @@ class UnknownPaymentSyncServiceTest {
             new PaymentTelemetry(OpenTelemetry.noop().getTracer("test")),
             new ChannelReturnCodeMapping.Fixed(
                     java.util.Set.of("00"),
-                    java.util.Set.of("51", "05", "96"),
-                    io.paysre.contracts.ChannelResult.FAILED));
+                    java.util.Set.of("51", "05", "96")));
 
     @Test
     void convergesAnUnknownPaymentTheChannelReportsAsSuccessful() {
@@ -114,6 +113,20 @@ class UnknownPaymentSyncServiceTest {
         assertThat(result.outcome()).isEqualTo(PaymentSyncOutcome.STILL_UNKNOWN);
         assertThat(result.channelResult()).isEqualTo(ChannelResult.TIMEOUT);
         assertThat(payment.status()).isEqualTo(PaymentStatus.UNKNOWN);
+    }
+
+    @Test
+    void keepsThePaymentUnknownWhenTheChannelReturnsAnUnmappedCode() {
+        var payment = unknownPayment("P5b");
+        when(repository.findByPaymentId("P5b")).thenReturn(Optional.of(payment));
+        when(channel.query("P5b")).thenReturn(response("P5b", ChannelResult.SUCCESS, "E9"));
+
+        var result = service.sync("P5b").orElseThrow();
+
+        assertThat(result.outcome()).isEqualTo(PaymentSyncOutcome.STILL_UNKNOWN);
+        assertThat(payment.status()).isEqualTo(PaymentStatus.UNKNOWN);
+        assertThat(payment.events().get(payment.events().size() - 1).reasonCode())
+                .isEqualTo("CHANNEL_CODE_UNMAPPED");
     }
 
     @Test

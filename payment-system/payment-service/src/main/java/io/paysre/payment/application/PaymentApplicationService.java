@@ -71,13 +71,14 @@ public final class PaymentApplicationService {
             if (response.result() == ChannelResult.TIMEOUT) {
                 payment.markUnknown("CHANNEL_TIMEOUT", clock.instant());
             } else {
-                var mappedResult = returnCodeMapping.resultFor(response.channelCode());
-                if (mappedResult == ChannelResult.SUCCESS) {
-                    payment.markSuccess(response.channelCode(), clock.instant());
-                } else if (mappedResult == ChannelResult.FAILED) {
-                    payment.markFailed(response.channelCode(), clock.instant());
-                } else {
-                    payment.markUnknown("CHANNEL_TIMEOUT", clock.instant());
+                var mapped = returnCodeMapping.map(response.channelCode());
+                switch (mapped.kind()) {
+                    case MAPPED_SUCCESS -> payment.markSuccess(
+                            response.channelCode(), clock.instant());
+                    case MAPPED_FAILURE -> payment.markFailed(
+                            response.channelCode(), clock.instant());
+                    case UNMAPPED -> payment.markUnknown(
+                            "CHANNEL_CODE_UNMAPPED", clock.instant());
                 }
             }
         } catch (ChannelCallTimeoutException exception) {
