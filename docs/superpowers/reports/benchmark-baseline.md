@@ -11,7 +11,7 @@ Model: StubInvestigationModel (deterministic; see `docs/superpowers/specs/2026-0
 | channel-timeout-but-success-v1 | `TIMEOUT_BUT_SUCCESS` | `CHANNEL_TIMEOUT_RESPONSE_LOST` | ChannelTimeoutResponseLostPolicy | `query-and-sync-unknown-payments` | no | yes | 6 | `runbookExecutionStatus=SUCCEEDED`, `finalPaymentStatus=SUCCESS` |
 | channel-timeout-but-failed-v1 | `TIMEOUT_BUT_FAILED` | `CHANNEL_TIMEOUT_RESPONSE_LOST` | ChannelTimeoutResponseLostPolicy | `query-and-sync-unknown-payments` | no | yes | 6 | `runbookExecutionStatus=SUCCEEDED`, `finalPaymentStatus=FAILED` |
 | channel-decline-spike-v1 | `DECLINE_ALL` | `CHANNEL_DECLINE_SPIKE` | ChannelDeclineSpikePolicy | [] | yes | yes | 4 | — |
-| channel-code-mapping-error-v1 | `NONE` | `CHANNEL_CODE_MAPPING_ERROR` | ChannelCodeMappingErrorPolicy | [] | yes | yes | 4 | — |
+| channel-code-mapping-error-v1 | `NONE` | `CHANNEL_CODE_MAPPING_ERROR` | ChannelCodeMappingErrorPolicy | [] | yes | yes | 5 | — |
 | channel-callback-lost-v1 | `CALLBACK_LOST` | `CHANNEL_CALLBACK_LOST` | ChannelCallbackLostPolicy | [] | yes | yes | 3 | — |
 | routing-misconfigured-v1 | `NONE` | `ROUTING_MISCONFIGURED` | RoutingMisconfiguredPolicy | [] | yes | yes | 3 | — |
 

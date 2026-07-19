@@ -12,7 +12,7 @@ traffic:
 expected:
   rootCause: CHANNEL_CODE_MAPPING_ERROR
   advisory: true
-  minimumEvidenceCount: 4
+  minimumEvidenceCount: 5
   requiredEvidenceTypes:
     - SERVICE_METRICS
     - STRUCTURED_LOGS
