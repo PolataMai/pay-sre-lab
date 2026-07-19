@@ -50,10 +50,6 @@ public final class ActionGuard {
             throw denied(incidentId, null, action, "anonymous", "ACTOR_REQUIRED",
                     "a runbook proposal requires a named human proposer");
         }
-        if (!allowedRunbooks.contains(runbook)) {
-            throw denied(incidentId, null, action, requestedBy, "RUNBOOK_NOT_ALLOWED",
-                    "runbook is not in the allowlist: " + runbook);
-        }
         var incident = incidentRepository.findById(incidentId).orElse(null);
         if (incident == null) {
             throw denied(incidentId, null, action, requestedBy, "INCIDENT_NOT_FOUND",
@@ -67,6 +63,15 @@ public final class ActionGuard {
         if (conclusion == null) {
             throw denied(incidentId, null, action, requestedBy, "CONCLUSION_MISSING",
                     "no validated conclusion exists for incident " + incidentId);
+        }
+        if (conclusion.recommendedRunbook() == null
+                || conclusion.recommendedRunbook().isEmpty()) {
+            throw denied(incidentId, null, action, requestedBy, "ADVISORY_NO_RUNBOOK",
+                    "this incident is advisory-only and does not allow runbook execution");
+        }
+        if (!allowedRunbooks.contains(runbook)) {
+            throw denied(incidentId, null, action, requestedBy, "RUNBOOK_NOT_ALLOWED",
+                    "runbook is not in the allowlist: " + runbook);
         }
         if (!conclusion.recommendedRunbook().equals(runbook)) {
             throw denied(incidentId, null, action, requestedBy, "RUNBOOK_MISMATCH",

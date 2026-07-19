@@ -102,7 +102,28 @@ class FaultScenarioE2ETest {
                 groundTruth.traffic().payments());
         assertConclusionAndGroundTruth(
                 groundTruth, conclusion, evidenceByType.keySet(), evidenceIndex.size());
-        remediateAndResolve(groundTruth, incidentId, paymentIds);
+        if (groundTruth.expected().advisory()) {
+            resolveAsAdvisory(groundTruth, incidentId);
+        } else {
+            remediateAndResolve(groundTruth, incidentId, paymentIds);
+        }
+    }
+
+    private void resolveAsAdvisory(
+            ScenarioGroundTruth groundTruth, String incidentId) throws Exception {
+        var proposal = postJson(
+                controlUri("/api/incidents/" + incidentId + "/runbook-executions"),
+                objectMapper.createObjectNode()
+                        .put("runbook", "anything-not-allowed")
+                        .put("requestedBy", "sre-primary"),
+                409);
+        assertThat(proposal.path("code").asText()).isEqualTo("ADVISORY_NO_RUNBOOK");
+
+        var resolved = postJson(
+                controlUri("/api/incidents/" + incidentId + "/resolution"),
+                objectMapper.createObjectNode().put("resolvedBy", "sre-primary"),
+                200);
+        assertThat(resolved.path("status").asText()).isEqualTo("RESOLVED");
     }
 
     private void remediateAndResolve(
@@ -235,7 +256,7 @@ class FaultScenarioE2ETest {
         assertThat(conclusion.path("affectedAmount").path("currency").asText())
                 .isEqualTo(groundTruth.traffic().currency());
         assertThat(conclusion.path("recommendedRunbook").asText())
-                .isEqualTo("query-and-sync-unknown-payments");
+                .isEqualTo(groundTruth.expected().recommendedRunbook());
         assertThat(conclusion.path("requiresHumanReview").asBoolean()).isTrue();
         assertThat(score.passed()).isTrue();
     }

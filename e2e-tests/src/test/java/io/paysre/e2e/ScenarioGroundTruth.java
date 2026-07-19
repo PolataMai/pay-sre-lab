@@ -63,16 +63,25 @@ record ScenarioGroundTruth(
         if (!(required instanceof List<?> items)) {
             throw new IllegalArgumentException("requiredEvidenceTypes must be a list");
         }
-        var remediation = map(values, "remediation");
+        boolean advisory = optionalBoolean(values, "advisory", false);
+        Remediation remediation = null;
+        if (!advisory) {
+            var remediationMap = map(values, "remediation");
+            remediation = new Remediation(
+                    string(remediationMap, "runbookExecutionStatus"),
+                    string(remediationMap, "finalPaymentStatus"));
+        }
+        String recommendedRunbook = advisory
+                ? optionalString(values, "recommendedRunbook", "")
+                : string(values, "recommendedRunbook");
         return new Expected(
                 string(values, "rootCause"),
                 number(values, "minimumEvidenceCount").intValueExact(),
                 items.stream().map(String::valueOf).toList(),
-                string(values, "recommendedRunbook"),
+                recommendedRunbook,
                 booleanValue(values, "requiresHumanReview"),
-                new Remediation(
-                        string(remediation, "runbookExecutionStatus"),
-                        string(remediation, "finalPaymentStatus")));
+                advisory,
+                remediation);
     }
 
     @SuppressWarnings("unchecked")
@@ -112,6 +121,27 @@ record ScenarioGroundTruth(
         return result;
     }
 
+    private static boolean optionalBoolean(
+            Map<String, Object> values, String name, boolean fallback) {
+        Object value = values.get(name);
+        if (value == null) {
+            return fallback;
+        }
+        if (value instanceof Boolean result) {
+            return result;
+        }
+        throw new IllegalArgumentException(name + " must be boolean");
+    }
+
+    private static String optionalString(
+            Map<String, Object> values, String name, String fallback) {
+        Object value = values.get(name);
+        if (value == null) {
+            return fallback;
+        }
+        return value.toString();
+    }
+
     record Fault(String channel, String type, BigDecimal probability, Duration activeFor) {
     }
 
@@ -124,11 +154,14 @@ record ScenarioGroundTruth(
             List<String> requiredEvidenceTypes,
             String recommendedRunbook,
             boolean requiresHumanReview,
+            boolean advisory,
             Remediation remediation) {
 
         Expected {
             requiredEvidenceTypes = List.copyOf(requiredEvidenceTypes);
-            Objects.requireNonNull(remediation, "remediation");
+            if (!advisory) {
+                Objects.requireNonNull(remediation, "remediation");
+            }
         }
     }
 

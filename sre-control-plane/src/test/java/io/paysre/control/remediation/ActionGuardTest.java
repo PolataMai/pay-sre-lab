@@ -59,6 +59,9 @@ class ActionGuardTest {
 
     @Test
     void deniesRunbooksOutsideTheAllowlist() {
+        when(incidents.findById("INC-1")).thenReturn(Optional.of(actionableIncident()));
+        when(conclusions.findByIncidentId("INC-1")).thenReturn(Optional.of(conclusion()));
+
         assertDenied(
                 () -> guard.authorizeProposal("INC-1", "drop-database", "operator-a"),
                 "RUNBOOK_NOT_ALLOWED");
@@ -115,6 +118,18 @@ class ActionGuardTest {
         assertDenied(
                 () -> guard.authorizeApproval("INC-1", "RUN-1", "operator-a"),
                 "FOUR_EYES_REQUIRED");
+    }
+
+    @Test
+    void refusesRunbookProposalForAdvisoryConclusions() {
+        when(incidents.findById("INC-1")).thenReturn(Optional.of(actionableIncident()));
+        when(conclusions.findByIncidentId("INC-1"))
+                .thenReturn(Optional.of(advisoryConclusion()));
+
+        assertDenied(
+                () -> guard.authorizeProposal(
+                        "INC-1", "any-runbook", "operator-a"),
+                "ADVISORY_NO_RUNBOOK");
     }
 
     @Test
@@ -187,6 +202,18 @@ class ActionGuardTest {
                 5,
                 new Money(new BigDecimal("50.00"), Currency.getInstance("CNY")),
                 QueryAndSyncUnknownPaymentsRunbook.NAME,
+                true);
+    }
+
+    private InvestigationConclusion advisoryConclusion() {
+        return new InvestigationConclusion(
+                "INC-1",
+                RootCauseCode.CHANNEL_DECLINE_SPIKE,
+                new BigDecimal("0.50"),
+                List.of("EVD-1", "EVD-2", "EVD-3"),
+                5,
+                new Money(new BigDecimal("50.00"), Currency.getInstance("CNY")),
+                "",
                 true);
     }
 

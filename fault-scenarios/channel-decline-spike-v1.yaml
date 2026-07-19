@@ -1,0 +1,20 @@
+id: channel-decline-spike-v1
+seed: 20260718
+fault:
+  channel: CHANNEL_A
+  type: DECLINE_ALL
+  probability: 1.00
+  activeFor: PT2M
+traffic:
+  payments: 5
+  amount: "10.00"
+  currency: CNY
+expected:
+  rootCause: CHANNEL_DECLINE_SPIKE
+  advisory: true
+  minimumEvidenceCount: 4
+  requiredEvidenceTypes:
+    - SERVICE_METRICS
+    - INCIDENT_IMPACT
+  recommendedRunbook: ""
+  requiresHumanReview: true
