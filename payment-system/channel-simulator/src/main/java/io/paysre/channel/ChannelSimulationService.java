@@ -60,13 +60,12 @@ public final class ChannelSimulationService {
                 .filter(rule -> decider.applies(request.paymentId(), rule))
                 .map(FaultRule::type)
                 .orElse(FaultType.NONE);
+        var outcome = outcomeFor(fault);
         var response = new ChannelPaymentResponse(
                 request.requestId(),
                 request.paymentId(),
-                fault == FaultType.TIMEOUT_BUT_FAILED
-                        ? ChannelResult.FAILED
-                        : ChannelResult.SUCCESS,
-                fault == FaultType.TIMEOUT_BUT_FAILED ? "51" : "00",
+                outcome.result(),
+                outcome.channelCode(),
                 now);
 
         finalStates.put(request.paymentId(), response);
@@ -77,6 +76,21 @@ public final class ChannelSimulationService {
             throw new ChannelTimeoutException(request.paymentId());
         }
         return response;
+    }
+
+    private ChannelOutcome outcomeFor(FaultType fault) {
+        return switch (fault) {
+            case TIMEOUT_BUT_SUCCESS -> new ChannelOutcome(
+                    ChannelResult.SUCCESS, "00");
+            case TIMEOUT_BUT_FAILED -> new ChannelOutcome(
+                    ChannelResult.FAILED, "51");
+            case DECLINE_ALL -> new ChannelOutcome(
+                    ChannelResult.FAILED, "05");
+            case NONE -> new ChannelOutcome(ChannelResult.SUCCESS, "00");
+        };
+    }
+
+    private record ChannelOutcome(ChannelResult result, String channelCode) {
     }
 
     private Duration elapsed(Instant started) {

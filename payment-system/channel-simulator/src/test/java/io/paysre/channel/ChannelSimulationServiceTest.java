@@ -85,6 +85,31 @@ class ChannelSimulationServiceTest {
     }
 
     @Test
+    void declineAllFaultReturnsAnImmediateFailedFinalState() {
+        var rules = new InMemoryFaultRuleRepository();
+        rules.replace(new FaultRule(
+                "CHANNEL_A",
+                FaultType.DECLINE_ALL,
+                new BigDecimal("1.00"),
+                NOW.minusSeconds(60),
+                NOW.plusSeconds(60),
+                20260718L));
+        var service = new ChannelSimulationService(
+                rules,
+                new FaultDecider(),
+                Clock.fixed(NOW, ZoneOffset.UTC),
+                new ChannelMetrics(new SimpleMeterRegistry()),
+                new ChannelTelemetry(OpenTelemetry.noop().getTracer("test")));
+
+        var response = service.pay(request("PAY-3"));
+
+        assertThat(response.result()).isEqualTo(ChannelResult.FAILED);
+        assertThat(response.channelCode()).isEqualTo("05");
+        assertThat(service.query("PAY-3").result())
+                .isEqualTo(ChannelResult.FAILED);
+    }
+
+    @Test
     void queryingAnUnknownPaymentFailsExplicitly() {
         var service = new ChannelSimulationService(
                 new InMemoryFaultRuleRepository(),

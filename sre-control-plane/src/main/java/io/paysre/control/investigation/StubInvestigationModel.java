@@ -239,11 +239,7 @@ public final class StubInvestigationModel implements InvestigationModel {
         var currency = Currency.getInstance(content.path("currency").asText());
         var policy = policies.forRootCause(targetRootCause);
         var runbooks = policy.allowedRunbooks();
-        if (runbooks.isEmpty()) {
-            throw new IllegalStateException(
-                    "stub model cannot conclude an advisory-only root cause: "
-                            + targetRootCause);
-        }
+        String recommendedRunbook = runbooks.isEmpty() ? "" : runbooks.iterator().next();
         var conclusion = new InvestigationConclusion(
                 context.incident().incidentId(),
                 targetRootCause,
@@ -251,7 +247,7 @@ public final class StubInvestigationModel implements InvestigationModel {
                 context.evidence().stream().map(item -> item.evidenceId()).toList(),
                 content.path("affectedPaymentCount").asLong(),
                 new Money(amount, currency),
-                runbooks.iterator().next(),
+                recommendedRunbook,
                 policy.requiresHumanReview());
         return new InvestigationDecision.Conclude(conclusion);
     }

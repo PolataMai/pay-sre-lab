@@ -25,3 +25,19 @@ groups:
         annotations:
           summary: Channel timeout rate is above the lab threshold
           threshold: "0.05"
+
+      - alert: ChannelDeclineRateHigh
+        expr: |
+          sum by (service,channel) (rate(payment_attempt_outcome_total{status="FAILED"}[1m]))
+            /
+          clamp_min(sum by (service,channel) (rate(payment_attempt_outcome_total[1m])), 0.001)
+            > 0.20
+        for: 15s
+        labels:
+          severity: warning
+          service: payment-service
+          alertname: ChannelDeclineRateHigh
+        annotations:
+          summary: Channel decline rate is above the lab threshold
+          observedValue: '{{ $value | humanizePercentage }}'
+          threshold: "0.20"

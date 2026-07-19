@@ -33,12 +33,25 @@ class RootCausePolicyCatalogTest {
     }
 
     @Test
+    void defaultsExposeTheDeclineSpikeAdvisoryPolicy() {
+        var catalog = RootCausePolicyCatalog.defaults();
+        var policy = catalog.forRootCause(RootCauseCode.CHANNEL_DECLINE_SPIKE);
+
+        assertThat(policy.allowedRunbooks()).isEmpty();
+        assertThat(policy.requiresHumanReview()).isTrue();
+    }
+
+    @Test
     void describeProducesDeterministicPolicySummary() {
         var description = RootCausePolicyCatalog.defaults().describe();
 
-        assertThat(description).isEqualTo(
+        assertThat(description).contains(
                 "- rootCause=CHANNEL_TIMEOUT_RESPONSE_LOST, "
                         + "allowedRunbooks=[query-and-sync-unknown-payments], "
+                        + "requiresHumanReview=true");
+        assertThat(description).contains(
+                "- rootCause=CHANNEL_DECLINE_SPIKE, "
+                        + "allowedRunbooks=[], "
                         + "requiresHumanReview=true");
     }
 

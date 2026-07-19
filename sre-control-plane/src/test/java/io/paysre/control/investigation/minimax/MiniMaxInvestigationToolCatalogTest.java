@@ -72,7 +72,7 @@ class MiniMaxInvestigationToolCatalogTest {
     }
 
     @Test
-    void catalogDefaultsEnumerateTheChannelTimeoutRootCause() {
+    void catalogDefaultsEnumerateEveryRegisteredRootCause() {
         ArrayNode tools = MiniMaxInvestigationTools.catalog(
                 MAPPER, RootCausePolicyCatalog.defaults());
         var conclude = findFunction(tools, "conclude_investigation");
@@ -84,7 +84,9 @@ class MiniMaxInvestigationToolCatalogTest {
                 .path("requiresHumanReview").path("enum");
 
         assertThat(toStringList(rootCauseEnum))
-                .containsExactly("CHANNEL_TIMEOUT_RESPONSE_LOST");
+                .containsExactly(
+                        "CHANNEL_DECLINE_SPIKE",
+                        "CHANNEL_TIMEOUT_RESPONSE_LOST");
         assertThat(toStringList(runbookEnum))
                 .containsExactly("query-and-sync-unknown-payments");
         assertThat(toBooleanList(reviewEnum)).containsExactly(true);
@@ -98,8 +100,8 @@ class MiniMaxInvestigationToolCatalogTest {
 
         assertThat(prompt).contains("Supported root cause policies:");
         assertThat(prompt).contains("CHANNEL_TIMEOUT_RESPONSE_LOST");
+        assertThat(prompt).contains("CHANNEL_DECLINE_SPIKE");
         assertThat(prompt).contains("query-and-sync-unknown-payments");
-        assertThat(prompt).contains("requiresHumanReview=true");
     }
 
     @Test

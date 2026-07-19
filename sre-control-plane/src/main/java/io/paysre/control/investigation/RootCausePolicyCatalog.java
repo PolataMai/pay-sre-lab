@@ -30,7 +30,9 @@ public final class RootCausePolicyCatalog {
     public static RootCausePolicyCatalog defaults() {
         return new RootCausePolicyCatalog(Map.of(
                 RootCauseCode.CHANNEL_TIMEOUT_RESPONSE_LOST,
-                new ChannelTimeoutResponseLostPolicy()));
+                new ChannelTimeoutResponseLostPolicy(),
+                RootCauseCode.CHANNEL_DECLINE_SPIKE,
+                new ChannelDeclineSpikePolicy()));
     }
 
     public static Builder builder() {
