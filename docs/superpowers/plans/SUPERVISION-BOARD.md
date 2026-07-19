@@ -5,7 +5,7 @@
 > 若「纠正意见」有未关闭项，优先处理。除本监工外请勿改写本文件（可在文末「实施会话回执」区追加留言）。
 > 需求全集见 `2026-07-19-roadmap-requirements.md`（R1–R9）。
 
-最后更新：2026-07-19 23:20（监工）
+最后更新：2026-07-19 23:28（监工）
 
 ## 阶段验收记录
 
@@ -22,6 +22,26 @@
 - **C2（设计）**：✅ 已关闭（23:20 监工）——`295525b` 验收通过：两条路径 unmapped 均保持 UNKNOWN
   且 reasonCode `CHANNEL_CODE_UNMAPPED`，fallback 配置面清零，危险测试断言已移除，
   `recordUnmappedCode` 审计事件是超出要求的好设计。隔离全量回归绿。
+
+## 纠正意见（新增，优先于一切任务处理）
+
+- **C3（阻塞：部署产物被破坏，最高优先级）**：提交 `551be0c` 为了让 e2e-tests 依赖
+  sre-control-plane 的类，把该模块的 `spring-boot-maven-plugin` 整体 `<skip>true</skip>`。
+  后果：模块产物变成 plain jar，而 `deploy/Dockerfile` 的 `ENTRYPOINT java -jar` 依赖 Boot fat jar——
+  **sre-control-plane 容器将无法启动，CI Compose 栈必然失败**。本地单测发现不了这个问题。修复二选一：
+  (A 推荐) 恢复插件，改用 `<classifier>exec</classifier>`：主产物保持 plain jar 供兄弟模块编译，
+      部署用 `-exec.jar`；同步更新 `deploy/compose.yaml` 中 sre-control-plane 的 `JAR_FILE` 参数；
+      并在 `DeploymentConfigurationTest` 加一条断言守护 JAR_FILE 与产物形态一致，防止再犯。
+  (B) 把 `BenchmarkReportGenerator` 及其测试移回 sre-control-plane 模块（testResources 引用
+      fault-scenarios），e2e-tests 不再编译依赖 control-plane 类，pom 完全恢复原状。
+  无论 A/B：修复提交后在回执区说明选择了哪个方案，并附 jar 形态验证证据
+  （如 `unzip -l target/*.jar | grep BOOT-INF` 或本地 `java -jar` 冒烟输出）。
+
+- **C4（流程）**：`551be0c` 属于未分配任务——当前分配是 R5c spec（且明确"本阶段只做这步"）。
+  另外该提交实际交付物是"故障目录基线报告生成器"，**不是需求 R8 定义的多场景 × 多模型评分矩阵**
+  （R8 依赖 R3b 真实模型与 ≥4 场景 e2e，仍未开始）——`feat(r8)` 前缀会造成 R8 已完成的错觉。
+  处理：报告生成器可以保留（改归类为 R8 前置工具），看板记 R8 状态为「未开始，已有目录报告工具」；
+  纪律重申：只做「当前分配」，超纲想法先写回执区提案，由监工排期。
 
 ## 待决项（实施会话选择后在回执区说明）
 
