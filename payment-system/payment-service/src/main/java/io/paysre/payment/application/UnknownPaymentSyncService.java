@@ -27,18 +27,21 @@ public final class UnknownPaymentSyncService {
     private final Clock clock;
     private final PaymentMetrics metrics;
     private final PaymentTelemetry telemetry;
+    private final ChannelReturnCodeMapping returnCodeMapping;
 
     public UnknownPaymentSyncService(
             PaymentRepository repository,
             ChannelStateQuery channelStateQuery,
             Clock clock,
             PaymentMetrics metrics,
-            PaymentTelemetry telemetry) {
+            PaymentTelemetry telemetry,
+            ChannelReturnCodeMapping returnCodeMapping) {
         this.repository = Objects.requireNonNull(repository, "repository");
         this.channelStateQuery = Objects.requireNonNull(channelStateQuery, "channelStateQuery");
         this.clock = Objects.requireNonNull(clock, "clock");
         this.metrics = Objects.requireNonNull(metrics, "metrics");
         this.telemetry = Objects.requireNonNull(telemetry, "telemetry");
+        this.returnCodeMapping = Objects.requireNonNull(returnCodeMapping, "returnCodeMapping");
     }
 
     public Optional<PaymentSyncResult> sync(String paymentId) {
@@ -63,12 +66,16 @@ public final class UnknownPaymentSyncService {
         } catch (ChannelCallTimeoutException | ChannelStateMissingException exception) {
             return Optional.of(stillUnknown(paymentId, null));
         }
-        if (response.result() == ChannelResult.SUCCESS) {
+        if (response.result() == ChannelResult.TIMEOUT) {
+            return Optional.of(stillUnknown(paymentId, ChannelResult.TIMEOUT));
+        }
+        var mappedResult = returnCodeMapping.resultFor(response.channelCode());
+        if (mappedResult == ChannelResult.SUCCESS) {
             payment.confirmUnknownSuccess(response.channelCode(), clock.instant());
-        } else if (response.result() == ChannelResult.FAILED) {
+        } else if (mappedResult == ChannelResult.FAILED) {
             payment.confirmUnknownFailure(response.channelCode(), clock.instant());
         } else {
-            return Optional.of(stillUnknown(paymentId, response.result()));
+            return Optional.of(stillUnknown(paymentId, mappedResult));
         }
 
         repository.save(payment, null);

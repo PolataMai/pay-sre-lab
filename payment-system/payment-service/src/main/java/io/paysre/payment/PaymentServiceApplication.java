@@ -2,6 +2,7 @@ package io.paysre.payment;
 
 import io.paysre.payment.adapter.http.HttpChannelClient;
 import io.paysre.payment.application.ChannelClient;
+import io.paysre.payment.application.ChannelReturnCodeMapping;
 import io.paysre.payment.application.ChannelStateQuery;
 import io.paysre.payment.application.PaymentApplicationService;
 import io.paysre.payment.application.UnknownPaymentSyncService;
@@ -75,9 +76,11 @@ public class PaymentServiceApplication {
             ChannelStateQuery channelStateQuery,
             Clock clock,
             PaymentMetrics metrics,
-            PaymentTelemetry telemetry) {
+            PaymentTelemetry telemetry,
+            ChannelReturnCodeMapping returnCodeMapping) {
         return new UnknownPaymentSyncService(
-                repository, channelStateQuery, clock, metrics, telemetry);
+                repository, channelStateQuery, clock, metrics, telemetry,
+                returnCodeMapping);
     }
 
     @Bean
@@ -87,8 +90,31 @@ public class PaymentServiceApplication {
             PaymentIdGenerator ids,
             Clock clock,
             PaymentMetrics metrics,
-            PaymentTelemetry telemetry) {
+            PaymentTelemetry telemetry,
+            ChannelReturnCodeMapping returnCodeMapping) {
         return new PaymentApplicationService(
-                repository, channelClient, ids, clock, metrics, telemetry);
+                repository, channelClient, ids, clock, metrics, telemetry,
+                returnCodeMapping);
+    }
+
+    @Bean
+    ChannelReturnCodeMapping channelReturnCodeMapping(
+            @Value("${paysre.channel.code-mapping.success-codes:00}") String successCodes,
+            @Value("${paysre.channel.code-mapping.failure-codes:51,05,96}") String failureCodes,
+            @Value("${paysre.channel.code-mapping.fallback-result:FAILED}") String fallback) {
+        return new ChannelReturnCodeMapping.Fixed(
+                csv(successCodes),
+                csv(failureCodes),
+                io.paysre.contracts.ChannelResult.valueOf(fallback));
+    }
+
+    private static java.util.Set<String> csv(String csv) {
+        if (csv == null || csv.isBlank()) {
+            return java.util.Set.of();
+        }
+        return java.util.Arrays.stream(csv.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
     }
 }

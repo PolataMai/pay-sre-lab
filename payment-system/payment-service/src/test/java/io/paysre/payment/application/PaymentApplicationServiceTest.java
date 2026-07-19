@@ -107,7 +107,11 @@ class PaymentApplicationServiceTest {
                 () -> "P10001",
                 Clock.fixed(NOW, ZoneOffset.UTC),
                 new PaymentMetrics(registry),
-                new PaymentTelemetry(OpenTelemetry.noop().getTracer("test")));
+                new PaymentTelemetry(OpenTelemetry.noop().getTracer("test")),
+                new ChannelReturnCodeMapping.Fixed(
+                        java.util.Set.of("00"),
+                        java.util.Set.of("51", "05", "96"),
+                        io.paysre.contracts.ChannelResult.FAILED));
     }
 
     private AcceptPaymentCommand command(String idempotencyKey) {

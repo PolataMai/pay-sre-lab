@@ -37,7 +37,11 @@ class UnknownPaymentSyncServiceTest {
             channel,
             Clock.fixed(NOW, ZoneOffset.UTC),
             new PaymentMetrics(registry),
-            new PaymentTelemetry(OpenTelemetry.noop().getTracer("test")));
+            new PaymentTelemetry(OpenTelemetry.noop().getTracer("test")),
+            new ChannelReturnCodeMapping.Fixed(
+                    java.util.Set.of("00"),
+                    java.util.Set.of("51", "05", "96"),
+                    io.paysre.contracts.ChannelResult.FAILED));
 
     @Test
     void convergesAnUnknownPaymentTheChannelReportsAsSuccessful() {

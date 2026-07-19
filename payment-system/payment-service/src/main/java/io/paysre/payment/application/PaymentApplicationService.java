@@ -22,6 +22,7 @@ public final class PaymentApplicationService {
     private final Clock clock;
     private final PaymentMetrics metrics;
     private final PaymentTelemetry telemetry;
+    private final ChannelReturnCodeMapping returnCodeMapping;
 
     public PaymentApplicationService(
             PaymentRepository repository,
@@ -29,13 +30,15 @@ public final class PaymentApplicationService {
             PaymentIdGenerator ids,
             Clock clock,
             PaymentMetrics metrics,
-            PaymentTelemetry telemetry) {
+            PaymentTelemetry telemetry,
+            ChannelReturnCodeMapping returnCodeMapping) {
         this.repository = Objects.requireNonNull(repository, "repository");
         this.channelClient = Objects.requireNonNull(channelClient, "channelClient");
         this.ids = Objects.requireNonNull(ids, "ids");
         this.clock = Objects.requireNonNull(clock, "clock");
         this.metrics = Objects.requireNonNull(metrics, "metrics");
         this.telemetry = Objects.requireNonNull(telemetry, "telemetry");
+        this.returnCodeMapping = Objects.requireNonNull(returnCodeMapping, "returnCodeMapping");
     }
 
     public PaymentOrder accept(AcceptPaymentCommand command) {
@@ -65,12 +68,17 @@ public final class PaymentApplicationService {
                     payment.paymentId(),
                     payment.channel(),
                     () -> channelClient.pay(toChannelRequest(payment)));
-            if (response.result() == ChannelResult.SUCCESS) {
-                payment.markSuccess(response.channelCode(), clock.instant());
-            } else if (response.result() == ChannelResult.FAILED) {
-                payment.markFailed(response.channelCode(), clock.instant());
-            } else {
+            if (response.result() == ChannelResult.TIMEOUT) {
                 payment.markUnknown("CHANNEL_TIMEOUT", clock.instant());
+            } else {
+                var mappedResult = returnCodeMapping.resultFor(response.channelCode());
+                if (mappedResult == ChannelResult.SUCCESS) {
+                    payment.markSuccess(response.channelCode(), clock.instant());
+                } else if (mappedResult == ChannelResult.FAILED) {
+                    payment.markFailed(response.channelCode(), clock.instant());
+                } else {
+                    payment.markUnknown("CHANNEL_TIMEOUT", clock.instant());
+                }
             }
         } catch (ChannelCallTimeoutException exception) {
             payment.markUnknown("CHANNEL_TIMEOUT", clock.instant());

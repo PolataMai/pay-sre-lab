@@ -15,6 +15,7 @@ import io.paysre.contracts.Money;
 import io.paysre.payment.application.AcceptPaymentCommand;
 import io.paysre.payment.application.ChannelCallTimeoutException;
 import io.paysre.payment.application.ChannelClient;
+import io.paysre.payment.application.ChannelReturnCodeMapping;
 import io.paysre.payment.application.PaymentApplicationService;
 import io.paysre.payment.application.PaymentRepository;
 import java.math.BigDecimal;
@@ -46,7 +47,11 @@ class PaymentStructuredLoggingTest {
                 () -> "PAY-1",
                 Clock.fixed(Instant.parse("2026-07-16T10:00:00Z"), ZoneOffset.UTC),
                 new PaymentMetrics(new SimpleMeterRegistry()),
-                new PaymentTelemetry(OpenTelemetry.noop().getTracer("test")));
+                new PaymentTelemetry(OpenTelemetry.noop().getTracer("test")),
+                new ChannelReturnCodeMapping.Fixed(
+                        java.util.Set.of("00"),
+                        java.util.Set.of("51", "05", "96"),
+                        io.paysre.contracts.ChannelResult.FAILED));
         var appender = capture(PaymentApplicationService.class);
         try {
             service.accept(new AcceptPaymentCommand(
