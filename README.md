@@ -75,6 +75,7 @@ docker compose -f deploy/compose.yaml up -d --build --wait
 | Prometheus | `http://localhost:9090` |
 | Loki | `http://localhost:3100` |
 | Tempo | `http://localhost:3200` |
+| PaySRE Console (R6) | `http://localhost:5173` |
 
 每个服务都提供 `/actuator/health/readiness`。停止并清理环境：
 
@@ -146,6 +147,25 @@ INVESTIGATION_MODEL_TIMEOUT=PT60S       # 真实模型需要比 stub 更长的�
 模型只能通过 OpenAI 兼容的 function calling 在 8 个工具里做选择：6 个只读网关工具，加 `conclude_investigation` 与 `escalate_to_human` 两个决策工具。每一步决策都是无状态单发请求——完整调查状态（Incident、种子交易、已采集 Evidence、历史工具结果、上一次结论校验失败原因）每轮重建注入。所有既有安全边界原样生效：工具审计、Evidence 哈希、结论验证器、12 次调用/120 秒/连续空结果的 fail-closed 熔断。模型返回自由文本、未知根因、非法金额或网络故障时一律转 `NEEDS_HUMAN`，绝不猜测。设计细节见 [`docs/superpowers/specs/2026-07-17-minimax-investigation-model-design.md`](docs/superpowers/specs/2026-07-17-minimax-investigation-model-design.md)。
 
 缺 key 启动 `minimax` 模式会直接拒绝启动；CI 与 `mvn clean verify` 不需要任何外部凭据。
+
+## PaySRE 事故控制台（R6 + R7）
+
+`console/` 是 React + Vite + TypeScript 实现的运维控制台，三条主路径：
+
+- `Incidents` 列表与详情，展示六类 Evidence（指标 / 日志 / Trace / 支付时间线 / 渠道终态 / 影响面）、工具调用审计、Runbook 提案 + 四眼审批 + 关单。advisory 根因场景会显式标 `ADVISORY` 并把 runbook 提案灰掉。
+- `Fault injection` 抽屉（R7）直接安装/查询渠道故障规则（`NONE` / `TIMEOUT_BUT_SUCCESS` / `TIMEOUT_BUT_FAILED` / `DECLINE_ALL` / `CALLBACK_LOST` / `CALLBACK_DUPLICATED`），与 `fault-scenarios/` 配对完成一次端到端演练，无需 curl。
+- `Benchmark` 页内嵌 `docs/superpowers/reports/benchmark-baseline.md`，由 `BenchmarkReportGeneratorTest` 在 CI 时重新生成。
+
+构建与本地开发：
+
+```bash
+cd console
+npm install
+npm run dev   # Vite dev server, http://localhost:5173
+npm run build # dist/
+```
+
+在 `deploy/compose.yaml` 中以 `pay-sre-console` 服务名启动，端口 `5173`，通过 nginx 反代 `/api/` 转发到 `sre-control-plane:8082`。
 
 ## 配置中心（Nacos）
 

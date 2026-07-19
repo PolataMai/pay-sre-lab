@@ -33,7 +33,8 @@ class DeploymentConfigurationTest {
                 "grafana",
                 "channel-simulator",
                 "payment-service",
-                "sre-control-plane");
+                "sre-control-plane",
+                "pay-sre-console");
         for (String service : java.util.List.of(
                 "channel-simulator", "payment-service", "sre-control-plane")) {
             var healthcheck = map(map(services, service), "healthcheck");

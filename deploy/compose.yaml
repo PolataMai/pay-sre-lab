@@ -299,6 +299,20 @@ services:
       retries: 30
     networks: [pay-sre]
 
+  pay-sre-console:
+    image: paysre/console:local
+    build:
+      context: ../console
+      dockerfile: Dockerfile
+    environment:
+      VITE_CONTROL_PLANE_URL: http://sre-control-plane:8082
+    ports:
+      - "${CONSOLE_PORT:-5173}:5173"
+    depends_on:
+      sre-control-plane:
+        condition: service_healthy
+    networks: [pay-sre]
+
 volumes:
   application-logs:
   prometheus-data:
