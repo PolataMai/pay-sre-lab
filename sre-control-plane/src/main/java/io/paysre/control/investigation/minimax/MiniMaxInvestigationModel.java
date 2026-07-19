@@ -12,6 +12,8 @@ import io.paysre.control.investigation.InvestigationConclusion;
 import io.paysre.control.investigation.InvestigationDecision;
 import io.paysre.control.investigation.InvestigationModel;
 import io.paysre.control.investigation.RootCauseCode;
+import io.paysre.control.investigation.RootCausePolicy;
+import io.paysre.control.investigation.RootCausePolicyCatalog;
 import io.paysre.control.tools.ToolResult;
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -25,12 +27,17 @@ import java.util.Objects;
  * call, and maps it onto the sealed decision type. Anything the model gets
  * wrong either fails closed here or is rejected downstream by the tool
  * gateway and the conclusion validator.
+ *
+ * <p>The {@code conclude_investigation} tool's enums and the system prompt's
+ * "supported root causes" list are derived from the {@link
+ * RootCausePolicyCatalog} so adding a fault family only requires registering
+ * a new policy.
  */
 public final class MiniMaxInvestigationModel implements InvestigationModel {
 
     private static final int MAX_EVIDENCE_CONTENT_CHARS = 16_384;
 
-    private static final String SYSTEM_PROMPT = """
+    private static final String SYSTEM_PROMPT_TEMPLATE = """
         You are the investigation agent of PaySRE Lab, a payment SRE control plane.
         Each turn you receive the full current investigation state as JSON and you
         must respond with EXACTLY ONE tool call and no free-form text.
@@ -57,29 +64,52 @@ public final class MiniMaxInvestigationModel implements InvestigationModel {
            includes usable SERVICE_METRICS evidence and at least two of
            PAYMENT_TIMELINE, STRUCTURED_LOGS, DISTRIBUTED_TRACE,
            CHANNEL_FINAL_STATE.
-        7. The only allowed recommendedRunbook is "query-and-sync-unknown-payments"
-           and requiresHumanReview must be true.
-        8. The only supported rootCause is CHANNEL_TIMEOUT_RESPONSE_LOST. If the
-           evidence does not support it, call escalate_to_human instead of guessing.
+        7. rootCause, recommendedRunbook and requiresHumanReview MUST come from the
+           catalogued root cause policies listed below. Do not invent values; the
+           conclusion validator will reject anything outside the allow-list.
+        8. If the evidence does not support any catalogued root cause, call
+           escalate_to_human instead of guessing.
         9. If lastValidationError is present, your previous conclusion was rejected
            for exactly that reason; fix that specific problem before concluding again.
         10. If required telemetry is unavailable or no progress is possible, call
             escalate_to_human with a concrete reason.
+
+        Supported root cause policies:
+        %s
         """;
 
     private final MiniMaxChatClient chatClient;
     private final ObjectMapper objectMapper;
+    private final RootCausePolicyCatalog policies;
     private final ArrayNode tools;
+    private final String systemPrompt;
 
     public MiniMaxInvestigationModel(MiniMaxChatClient chatClient, ObjectMapper objectMapper) {
+        this(chatClient, objectMapper, RootCausePolicyCatalog.defaults());
+    }
+
+    public MiniMaxInvestigationModel(
+            MiniMaxChatClient chatClient,
+            ObjectMapper objectMapper,
+            RootCausePolicyCatalog policies) {
         this.chatClient = Objects.requireNonNull(chatClient, "chatClient");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
-        this.tools = MiniMaxInvestigationTools.catalog(objectMapper);
+        this.policies = Objects.requireNonNull(policies, "policies");
+        this.tools = MiniMaxInvestigationTools.catalog(objectMapper, policies);
+        this.systemPrompt = buildSystemPrompt(policies);
+    }
+
+    String systemPrompt() {
+        return systemPrompt;
+    }
+
+    private static String buildSystemPrompt(RootCausePolicyCatalog policies) {
+        return SYSTEM_PROMPT_TEMPLATE.formatted(policies.describe());
     }
 
     @Override
     public InvestigationDecision decide(InvestigationContext context) {
-        var turn = chatClient.complete(SYSTEM_PROMPT, userPayload(context), tools);
+        var turn = chatClient.complete(systemPrompt, userPayload(context), tools);
         if (turn.toolCalls().isEmpty()) {
             throw new MiniMaxModelException(
                     "MINIMAX_NO_TOOL_DECISION",
@@ -101,17 +131,35 @@ public final class MiniMaxInvestigationModel implements InvestigationModel {
 
     private InvestigationDecision conclude(InvestigationContext context, JsonNode arguments) {
         try {
+            RootCauseCode rootCause = RootCauseCode.valueOf(
+                    arguments.path("rootCause").asText());
+            RootCausePolicy policy = policies.find(rootCause).orElseThrow(
+                    () -> new MiniMaxModelException(
+                            "MINIMAX_UNSUPPORTED_ROOT_CAUSE",
+                            "the model returned an unknown root cause: " + rootCause));
+            var runbook = arguments.path("recommendedRunbook").asText();
+            if (!policy.allowedRunbooks().contains(runbook)) {
+                throw new MiniMaxModelException(
+                        "MINIMAX_DISALLOWED_RUNBOOK",
+                        "runbook is not in the root cause allow-list: " + runbook);
+            }
+            var requiresHumanReview = arguments.path("requiresHumanReview").asBoolean(false);
+            if (requiresHumanReview != policy.requiresHumanReview()) {
+                throw new MiniMaxModelException(
+                        "MINIMAX_HUMAN_REVIEW_MISMATCH",
+                        "requiresHumanReview does not match the root cause policy");
+            }
             var conclusion = new InvestigationConclusion(
                     context.incident().incidentId(),
-                    RootCauseCode.valueOf(arguments.path("rootCause").asText()),
+                    rootCause,
                     new BigDecimal(arguments.path("confidence").asText()),
                     textList(arguments.path("evidenceIds")),
                     Long.parseLong(arguments.path("affectedPaymentCount").asText()),
                     new Money(
                             new BigDecimal(arguments.path("affectedAmount").asText()),
                             Currency.getInstance(arguments.path("currency").asText())),
-                    arguments.path("recommendedRunbook").asText(),
-                    arguments.path("requiresHumanReview").asBoolean(false));
+                    runbook,
+                    requiresHumanReview);
             return new InvestigationDecision.Conclude(conclusion);
         } catch (IllegalArgumentException | NullPointerException exception) {
             throw new MiniMaxModelException(
