@@ -171,7 +171,7 @@ export function IncidentDetail() {
                 {summary.sourceTool} v{summary.sourceToolVersion}
               </span>
               <div className="sha">sha256: {detail?.sha256 ?? '…'}</div>
-              {detail?.content && (
+              {detail?.content != null && (
                 <pre
                   style={{
                     fontSize: '0.78rem',
