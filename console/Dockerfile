@@ -12,4 +12,3 @@ FROM nginx:1.27-alpine
 COPY --from=build /workspace/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 5173
-HEALTHCHECK --interval=15s CMD wget -qO- http://localhost:5173/ >/dev/null || exit 1
