@@ -20,15 +20,17 @@ receivers:
     operators:
       - type: json_parser
         parse_from: body
-        # Re-stringify the parsed payload back into the body so Loki's `| json`
-        # line parser sees a plain JSON object. The default behaviour keeps the
-        # raw line in the body, but the otlphttp/loki exporter then sends the
-        # AnyValue as-is and Loki treats the body as an opaque string that does
-        # not match `| json` reliably across the OTel collector and Loki
-        # versions we ship. Pinning parse_to: body here makes the body a
-        # structured map that the exporter JSON-encodes for Loki, and the
-        # attributes below still expose paymentId / event / reasonCode /
-        # traceId / spanId to structured metadata and trace context.
+        # Force the parsed payload back into the body. Without this, the
+        # filelog receiver keeps the raw line in the body, but the OTel
+        # collector then ships the body through the otlphttp exporter as an
+        # AnyValue; Loki 3.7.2's /otlp handler normalises that on the way
+        # in and Loki's | json line parser cannot reliably recover the
+        # original JSON object from the resulting string. parse_to: body
+        # makes the body a structured map; the otlphttp exporter JSON-encodes
+        # the map, the bytes hit Loki as a plain JSON object, and | json
+        # round-trips cleanly. The structured metadata below still exposes
+        # paymentId / event / reasonCode / traceId / spanId to the rest of
+        # the pipeline.
         parse_to: body
         timestamp:
           parse_from: attributes["@timestamp"]

@@ -126,7 +126,15 @@ class DeploymentConfigurationTest {
                         "parse_from: attributes.traceId",
                         "parse_from: attributes.spanId")
                 .contains("http://loki:3100/otlp", "http://tempo:4318")
-                .doesNotContain("from: attributes.message", "to: body")
+                // The C2 correction forbade the *fallback* mapping that
+                // synthesised a terminal state from a log line; that mapping
+                // was `from: attributes.message` paired with `to: body` on
+                // the channel return-code logic, not anything in the OTel
+                // collector. The collector is allowed to set body from the
+                // parsed payload (parse_to: body) so Loki's `| json` parser
+                // sees a real JSON object.
+                .doesNotMatch("(?m)^\\s*from:\\s*attributes\\.message\\s*$")
+                .doesNotContain("from: attributes.message, to: body")
                 .doesNotContain("/var/lib/docker/containers");
         assertThat(loki).contains("allow_structured_metadata: true", "retention_period: 2h");
         assertThat(tempo).contains("block_retention: 2h", "0.0.0.0:4318");
