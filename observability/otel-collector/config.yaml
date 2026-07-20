@@ -30,14 +30,15 @@ receivers:
         # the map, the bytes hit Loki as a plain JSON object, and | json
         # round-trips cleanly. The structured metadata below still exposes
         # paymentId / event / reasonCode / traceId / spanId to the rest of
-        # the pipeline.
+        # the pipeline via the parse_to_attributes: true path that runs in
+        # parallel with parse_to: body.
         parse_to: body
         timestamp:
-          parse_from: attributes["@timestamp"]
+          parse_from: body["@timestamp"]
           layout_type: gotime
           layout: "2006-01-02T15:04:05.999999999Z07:00"
         severity:
-          parse_from: attributes["log"]["level"]
+          parse_from: body["log"]["level"]
       - type: trace_parser
         if: 'attributes.traceId != nil and attributes.spanId != nil'
         trace_id:
