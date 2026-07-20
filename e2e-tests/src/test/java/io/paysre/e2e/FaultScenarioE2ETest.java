@@ -317,11 +317,22 @@ class FaultScenarioE2ETest {
     }
 
     private Optional<String> findTraceIdInLogs(String paymentId, Instant from) {
+        // The OTel collector's filelog/paysre receiver runs json_parser with
+        // the default parse_to: attributes, so the ECS JSON's top-level keys
+        // (paymentId / event / reasonCode / traceId / spanId) end up as log
+        // attributes and, when shipped through the otlphttp/loki exporter,
+        // as Loki structured metadata. Loki 3.x normalises structured
+        // metadata keys the same way it normalises label names — lowercased
+        // and with `.` / `-` replaced by `_` — so the original-camelCase
+        // names are stored as paymentid / event / reasoncode / traceid /
+        // spanid. Line filters that arrive before a parser can match
+        // structured metadata directly, which is faster than running `| json`
+        // first and avoids depending on the body field's exact serialisation
+        // through the OTel collector and Loki's OTLP handler.
         var query = "{service_name=\"payment-service\"}"
-                + " | json"
-                + " | paymentId=\"" + paymentId + "\""
+                + " | paymentid=\"" + paymentId + "\""
                 + " | event=\"PAYMENT_STATE_CHANGED\""
-                + " | reasonCode=\"CHANNEL_TIMEOUT\"";
+                + " | reasoncode=\"CHANNEL_TIMEOUT\"";
         return tryGetJson(
                         queryUri(
                                 LOKI_BASE_URL,
