@@ -317,8 +317,14 @@ class FaultScenarioE2ETest {
     }
 
     private Optional<String> findTraceIdInLogs(String paymentId, Instant from) {
+        // The OTel collector's json_parser populates log attributes from the
+        // ECS payload (paymentId / event / reasonCode). When the OTel exporter
+        // pushes the record to Loki's /otlp endpoint, those attributes become
+        // structured metadata, not part of the log line. Loki's `| json` line
+        // parser only sees the body, which on this path is the OTel-encoded
+        // body (stringified map). Dropping `| json` makes LogQL match against
+        // the structured metadata directly, which is what we actually want.
         var query = "{service_name=\"payment-service\"}"
-                + " | json"
                 + " | paymentId=\"" + paymentId + "\""
                 + " | event=\"PAYMENT_STATE_CHANGED\""
                 + " | reasonCode=\"CHANNEL_TIMEOUT\"";
