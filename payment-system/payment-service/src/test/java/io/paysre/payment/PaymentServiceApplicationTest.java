@@ -2,6 +2,8 @@ package io.paysre.payment;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
+import io.opentelemetry.api.OpenTelemetry;
 import io.paysre.payment.application.PaymentApplicationService;
 import io.paysre.payment.application.PaymentRepository;
 import org.junit.jupiter.api.Test;
@@ -26,9 +28,17 @@ class PaymentServiceApplicationTest {
     @Autowired
     private PaymentRepository repository;
 
+    @Autowired
+    private PrometheusMeterRegistry prometheusRegistry;
+
+    @Autowired
+    private OpenTelemetry openTelemetry;
+
     @Test
     void wiresTheApplicationWithoutExternalServices() {
         assertThat(applicationService).isNotNull();
         assertThat(repository).isNotNull();
+        assertThat(prometheusRegistry).isNotNull();
+        assertThat(openTelemetry).isNotNull();
     }
 }

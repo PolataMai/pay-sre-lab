@@ -14,8 +14,12 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public final class InvestigationOrchestrator {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(InvestigationOrchestrator.class);
 
     private static final int MAX_TOOL_CALLS = 12;
     private static final int MAX_CONSECUTIVE_EMPTY_RESULTS = 3;
@@ -114,8 +118,23 @@ public final class InvestigationOrchestrator {
                 try {
                     var validated = validator.validate(incident, conclude.conclusion());
                     conclusionRepository.save(validated);
-                    incident.markMitigationProposed(clock.instant());
+                    // Advisory conclusions recommend no runbook; jump
+                    // straight to MITIGATED so the human-resolve path
+                    // can close the incident without a proposal.
+                    if (validated.recommendedRunbook() == null
+                            || validated.recommendedRunbook().isEmpty()) {
+                        incident.markMitigated(clock.instant());
+                    } else {
+                        incident.markMitigationProposed(clock.instant());
+                    }
                     incidentRepository.save(incident);
+                    LOGGER.atInfo()
+                            .addKeyValue("event", "INCIDENT_INVESTIGATION_COMPLETED")
+                            .addKeyValue("incidentId", incident.incidentId())
+                            .addKeyValue("rootCause", validated.rootCause().name())
+                            .addKeyValue("confidence", validated.confidence())
+                            .addKeyValue("evidenceCount", validated.evidenceIds().size())
+                            .log("Incident investigation completed");
                     return validated;
                 } catch (InvalidConclusionException exception) {
                     invalidConclusions++;
@@ -170,6 +189,11 @@ public final class InvestigationOrchestrator {
     private InvestigationConclusion escalate(Incident incident, String reason) {
         incident.markNeedsHuman(clock.instant());
         incidentRepository.save(incident);
+        LOGGER.atWarn()
+                .addKeyValue("event", "INCIDENT_INVESTIGATION_ESCALATED")
+                .addKeyValue("incidentId", incident.incidentId())
+                .addKeyValue("reason", reason)
+                .log("Incident investigation escalated");
         throw new InvestigationEscalatedException(reason);
     }
 

@@ -11,6 +11,7 @@ import io.paysre.control.evidence.EvidenceRepository;
 import io.paysre.control.incident.Incident;
 import io.paysre.control.incident.IncidentRepository;
 import io.paysre.control.incident.IncidentStatus;
+import io.paysre.control.observability.ObservabilityBackendException;
 import io.paysre.control.tools.ToolAuditRepository;
 import io.paysre.control.tools.ToolDefinition;
 import io.paysre.control.tools.ToolGateway;
@@ -65,7 +66,25 @@ class InvestigationOrchestratorTest {
     @Test
     void investigatesInDeterministicOrderAndPersistsAnEvidenceBackedConclusion() {
         var toolOrder = new ArrayList<String>();
+        var traceId = "5b8efff798038103d269b633813fc700";
         var gateway = gateway(List.of(
+                handler("query_service_metrics", toolOrder, Map.of(
+                        "signal", "PAYMENT_UNKNOWN_CURRENT",
+                        "series", List.of(Map.of("samples", List.of(Map.of("value", 5)))),
+                        "warnings", List.of(),
+                        "truncated", false)),
+                handler("search_structured_logs", toolOrder, Map.of(
+                        "records", List.of(Map.of(
+                                "paymentId", "P10001",
+                                "traceId", traceId,
+                                "event", "PAYMENT_STATE_CHANGED")),
+                        "truncated", false)),
+                handler("get_distributed_trace", toolOrder, input -> {
+                    assertThat(input.get("traceId")).isEqualTo(traceId);
+                    return Map.of(
+                            "traceId", traceId,
+                            "spans", List.of(Map.of("name", "payment.channel.invoke")));
+                }),
                 handler("get_payment_timeline", toolOrder, Map.of(
                         "paymentId", "P10001",
                         "events", List.of(Map.of("reasonCode", "CHANNEL_TIMEOUT")))),
@@ -76,17 +95,23 @@ class InvestigationOrchestratorTest {
                         "totalAmount", new BigDecimal("50.00"),
                         "currency", "CNY",
                         "paymentIds", List.of("P1", "P2", "P3", "P4", "P5")))));
-        var orchestrator = orchestrator(new StubInvestigationModel(objectMapper), gateway);
+        var orchestrator = orchestrator(
+                new StubInvestigationModel(
+                        objectMapper, Clock.fixed(NOW, ZoneOffset.UTC)),
+                gateway);
 
         var conclusion = orchestrator.investigate(INCIDENT_ID, seed());
 
         assertThat(toolOrder).containsExactly(
+                "query_service_metrics",
+                "search_structured_logs",
+                "get_distributed_trace",
                 "get_payment_timeline",
                 "query_channel_final_state",
                 "calculate_incident_impact");
         assertThat(conclusion.rootCause())
                 .isEqualTo(RootCauseCode.CHANNEL_TIMEOUT_RESPONSE_LOST);
-        assertThat(conclusion.evidenceIds()).hasSizeGreaterThanOrEqualTo(3);
+        assertThat(conclusion.evidenceIds()).hasSizeGreaterThanOrEqualTo(6);
         assertThat(conclusion.affectedPaymentCount()).isEqualTo(5);
         assertThat(conclusion.affectedAmount().amount()).isEqualByComparingTo("50.00");
         assertThat(conclusions.findByIncidentId(INCIDENT_ID)).contains(conclusion);
@@ -94,7 +119,98 @@ class InvestigationOrchestratorTest {
                 .isEqualTo(IncidentStatus.MITIGATION_PROPOSED);
 
         assertThat(orchestrator.investigate(INCIDENT_ID, seed())).isEqualTo(conclusion);
-        assertThat(toolOrder).hasSize(3);
+        assertThat(toolOrder).hasSize(6);
+    }
+
+    @Test
+    void continuesWithoutTraceWhenLogsAreUnavailableButMinimumEvidenceCanStillBeMet() {
+        var toolOrder = new ArrayList<String>();
+        var gateway = gateway(List.of(
+                handler("query_service_metrics", toolOrder, Map.of(
+                        "signal", "PAYMENT_UNKNOWN_CURRENT",
+                        "series", List.of(Map.of(
+                                "samples", List.of(Map.of("value", 5)))))),
+                handler("search_structured_logs", toolOrder, input -> {
+                    throw new ObservabilityBackendException(
+                            ObservabilityBackendException.Code.BACKEND_UNAVAILABLE,
+                            "loki unavailable");
+                }),
+                handler("get_payment_timeline", toolOrder, Map.of(
+                        "paymentId", "P10001",
+                        "events", List.of(Map.of("reasonCode", "CHANNEL_TIMEOUT")))),
+                handler("query_channel_final_state", toolOrder, Map.of(
+                        "paymentId", "P10001", "result", "SUCCESS")),
+                handler("calculate_incident_impact", toolOrder, Map.of(
+                        "affectedPaymentCount", 5,
+                        "totalAmount", new BigDecimal("50.00"),
+                        "currency", "CNY",
+                        "paymentIds", List.of("P1", "P2", "P3", "P4", "P5")))));
+        var model = new StubInvestigationModel(
+                objectMapper, Clock.fixed(NOW, ZoneOffset.UTC));
+
+        var conclusion = orchestrator(model, gateway).investigate(INCIDENT_ID, seed());
+
+        assertThat(toolOrder).containsExactly(
+                "query_service_metrics",
+                "search_structured_logs",
+                "get_payment_timeline",
+                "query_channel_final_state",
+                "calculate_incident_impact");
+        assertThat(conclusion.evidenceIds()).hasSize(4);
+    }
+
+    @Test
+    void escalatesImmediatelyWhenAggregateMetricsAreUnavailable() {
+        var toolOrder = new ArrayList<String>();
+        var gateway = gateway(List.of(handler(
+                "query_service_metrics", toolOrder, input -> {
+                    throw new ObservabilityBackendException(
+                            ObservabilityBackendException.Code.BACKEND_UNAVAILABLE,
+                            "prometheus unavailable");
+                })));
+        var model = new StubInvestigationModel(
+                objectMapper, Clock.fixed(NOW, ZoneOffset.UTC));
+
+        assertThatThrownBy(() -> orchestrator(model, gateway)
+                        .investigate(INCIDENT_ID, seed()))
+                .isInstanceOf(InvestigationEscalatedException.class)
+                .hasMessageContaining("aggregate metrics");
+        assertThat(toolOrder).containsExactly("query_service_metrics");
+    }
+
+    @Test
+    void doesNotTreatEmptyTelemetryResultsAsTransactionFacts() {
+        var toolOrder = new ArrayList<String>();
+        var gateway = gateway(List.of(
+                handler("query_service_metrics", toolOrder, Map.of(
+                        "signal", "PAYMENT_UNKNOWN_CURRENT",
+                        "series", List.of(Map.of(
+                                "samples", List.of(Map.of("value", 5)))))),
+                handler("search_structured_logs", toolOrder, Map.of(
+                        "records", List.of(),
+                        "truncated", false)),
+                handler("get_payment_timeline", toolOrder, Map.of(
+                        "paymentId", "P10001",
+                        "events", List.of())),
+                handler("query_channel_final_state", toolOrder, Map.of(
+                        "paymentId", "P10001", "result", "SUCCESS")),
+                handler("calculate_incident_impact", toolOrder, Map.of(
+                        "affectedPaymentCount", 5,
+                        "totalAmount", new BigDecimal("50.00"),
+                        "currency", "CNY"))));
+        var model = new StubInvestigationModel(
+                objectMapper, Clock.fixed(NOW, ZoneOffset.UTC));
+
+        assertThatThrownBy(() -> orchestrator(model, gateway)
+                        .investigate(INCIDENT_ID, seed()))
+                .isInstanceOf(InvestigationEscalatedException.class)
+                .hasMessageContaining("transaction-specific");
+        assertThat(toolOrder).containsExactly(
+                "query_service_metrics",
+                "search_structured_logs",
+                "get_payment_timeline",
+                "query_channel_final_state",
+                "calculate_incident_impact");
     }
 
     @Test
@@ -116,25 +232,49 @@ class InvestigationOrchestratorTest {
 
     @Test
     void validatorRejectsMissingEvidenceAndFabricatedImpact() {
-        evidence.save(evidence("E1", "PAYMENT_TIMELINE", Map.of("paymentId", "P10001")));
-        evidence.save(evidence("E2", "CHANNEL_FINAL_STATE", Map.of("result", "SUCCESS")));
-        evidence.save(evidence("E3", "INCIDENT_IMPACT", Map.of(
+        evidence.save(evidence("E1", "SERVICE_METRICS", Map.of(
+                "signal", "PAYMENT_UNKNOWN_CURRENT",
+                "series", List.of(Map.of(
+                        "samples", List.of(Map.of("value", 5)))))));
+        evidence.save(evidence("E2", "PAYMENT_TIMELINE", Map.of(
+                "paymentId", "P10001",
+                "events", List.of(Map.of("reasonCode", "CHANNEL_TIMEOUT")))));
+        evidence.save(evidence("E3", "STRUCTURED_LOGS", Map.of(
+                "records", List.of(Map.of(
+                        "paymentId", "P10001",
+                        "traceId", "5b8efff798038103d269b633813fc700")))));
+        evidence.save(evidence("E4", "INCIDENT_IMPACT", Map.of(
                 "affectedPaymentCount", 5,
                 "totalAmount", new BigDecimal("50.00"),
                 "currency", "CNY")));
+        evidence.save(evidence("E5", "STRUCTURED_LOGS", Map.of(
+                "records", List.of())));
+        evidence.save(evidence("E6", "DISTRIBUTED_TRACE", Map.of(
+                "traceId", "5b8efff798038103d269b633813fc700",
+                "spans", List.of())));
         var validator = new ConclusionValidator(evidence);
-        var valid = conclusion(List.of("E1", "E2", "E3"), 5, "50.00");
+        var valid = conclusion(List.of("E1", "E2", "E3", "E4"), 5, "50.00");
 
         assertThatThrownBy(() -> validator.validate(
                         incidents.findById(INCIDENT_ID).orElseThrow(),
-                        conclusion(List.of("E1", "E2", "MISSING"), 5, "50.00")))
+                        conclusion(List.of("E1", "E2", "E3", "MISSING"), 5, "50.00")))
                 .isInstanceOf(InvalidConclusionException.class)
                 .hasMessageContaining("MISSING");
         assertThatThrownBy(() -> validator.validate(
                         incidents.findById(INCIDENT_ID).orElseThrow(),
-                        conclusion(List.of("E1", "E2", "E3"), 6, "60.00")))
+                        conclusion(List.of("E1", "E2", "E3", "E4"), 6, "60.00")))
                 .isInstanceOf(InvalidConclusionException.class)
                 .hasMessageContaining("impact");
+        assertThatThrownBy(() -> validator.validate(
+                        incidents.findById(INCIDENT_ID).orElseThrow(),
+                        conclusion(List.of("E2", "E3", "E4"), 5, "50.00")))
+                .isInstanceOf(InvalidConclusionException.class)
+                .hasMessageContaining("aggregate");
+        assertThatThrownBy(() -> validator.validate(
+                        incidents.findById(INCIDENT_ID).orElseThrow(),
+                        conclusion(List.of("E1", "E4", "E5", "E6"), 5, "50.00")))
+                .isInstanceOf(InvalidConclusionException.class)
+                .hasMessageContaining("transaction-specific");
         assertThat(validator.validate(
                         incidents.findById(INCIDENT_ID).orElseThrow(), valid))
                 .isSameAs(valid);
@@ -284,6 +424,13 @@ class InvestigationOrchestratorTest {
 
     private ToolHandler<Map, Map> handler(
             String name, List<String> toolOrder, Map<String, Object> output) {
+        return handler(name, toolOrder, input -> output);
+    }
+
+    private ToolHandler<Map, Map> handler(
+            String name,
+            List<String> toolOrder,
+            java.util.function.Function<Map, Map<String, Object>> operation) {
         return new ToolHandler<>() {
             @Override
             public ToolDefinition definition() {
@@ -304,7 +451,7 @@ class InvestigationOrchestratorTest {
             @Override
             public Map execute(Map input) {
                 toolOrder.add(name);
-                return output;
+                return operation.apply(input);
             }
         };
     }
@@ -413,6 +560,13 @@ class InvestigationOrchestratorTest {
         @Override
         public void record(ToolInvocation invocation) {
             invocations.add(invocation);
+        }
+
+        @Override
+        public List<ToolInvocation> findByIncidentId(String incidentId) {
+            return invocations.stream()
+                    .filter(item -> item.incidentId().equals(incidentId))
+                    .toList();
         }
     }
 

@@ -6,36 +6,40 @@ import io.paysre.control.incident.Incident;
 import java.math.BigDecimal;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Set;
+import java.util.Objects;
 
 public final class ConclusionValidator {
 
-    private static final String REQUIRED_RUNBOOK = "query-and-sync-unknown-payments";
-    private static final Set<String> REQUIRED_EVIDENCE_TYPES = Set.of(
-            "PAYMENT_TIMELINE", "CHANNEL_FINAL_STATE", "INCIDENT_IMPACT");
-
     private final EvidenceRepository evidenceRepository;
+    private final RootCausePolicyCatalog policies;
 
+    /**
+     * Backward-compatible constructor used by existing wiring and
+     * tests. The built-in catalog covers every policy that ships with
+     * the control plane.
+     */
     public ConclusionValidator(EvidenceRepository evidenceRepository) {
-        this.evidenceRepository = evidenceRepository;
+        this(evidenceRepository, RootCausePolicyCatalog.defaults());
+    }
+
+    public ConclusionValidator(
+            EvidenceRepository evidenceRepository, RootCausePolicyCatalog policies) {
+        this.evidenceRepository = Objects.requireNonNull(
+                evidenceRepository, "evidenceRepository");
+        this.policies = Objects.requireNonNull(policies, "policies");
     }
 
     public InvestigationConclusion validate(
             Incident incident, InvestigationConclusion conclusion) {
         require(incident.incidentId().equals(conclusion.incidentId()),
                 "conclusion incident does not match current incident");
-        require(conclusion.rootCause() == RootCauseCode.CHANNEL_TIMEOUT_RESPONSE_LOST,
-                "unsupported root cause");
         require(conclusion.confidence().compareTo(BigDecimal.ZERO) >= 0
                         && conclusion.confidence().compareTo(BigDecimal.ONE) <= 0,
                 "confidence must be between zero and one");
         require(conclusion.affectedPaymentCount() >= 0,
                 "affected payment count must not be negative");
-        require(REQUIRED_RUNBOOK.equals(conclusion.recommendedRunbook()),
-                "recommended runbook is not allowed for this root cause");
-        require(conclusion.requiresHumanReview(),
-                "this runbook requires human review");
 
+        var policy = policies.forRootCause(conclusion.rootCause());
         var uniqueEvidenceIds = new LinkedHashSet<>(conclusion.evidenceIds());
         require(uniqueEvidenceIds.size() >= 3,
                 "at least three unique evidence references are required");
@@ -48,9 +52,10 @@ public final class ConclusionValidator {
         referenced.forEach(item -> require(
                 item.incidentId().equals(incident.incidentId()),
                 "evidence belongs to another incident: " + item.evidenceId()));
-        var types = referenced.stream().map(Evidence::evidenceType).collect(java.util.stream.Collectors.toSet());
-        require(types.containsAll(REQUIRED_EVIDENCE_TYPES),
-                "required evidence types are missing");
+
+        policy.validateConclusion(
+                new RootCausePolicy.IncidentContext(incident.incidentId()),
+                conclusion, referenced);
 
         boolean impactMatches = referenced.stream()
                 .filter(item -> item.evidenceType().equals("INCIDENT_IMPACT"))

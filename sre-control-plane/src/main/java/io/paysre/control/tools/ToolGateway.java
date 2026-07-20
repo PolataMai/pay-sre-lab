@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.paysre.control.evidence.Evidence;
 import io.paysre.control.evidence.EvidenceRepository;
+import io.paysre.control.observability.ObservabilityBackendException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
@@ -19,8 +20,12 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Supplier;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public final class ToolGateway {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(ToolGateway.class);
 
     private final Map<String, ToolHandler<?, ?>> handlers;
     private final ObjectMapper objectMapper;
@@ -110,11 +115,11 @@ public final class ToolGateway {
                     agentId,
                     toolName,
                     handler.definition().version(),
-                    "TOOL_EXECUTION_FAILED",
+                    executionErrorCode(exception.getCause()),
                     started);
         }
 
-        JsonNode content = objectMapper.valueToTree(output);
+        JsonNode content = canonicalize(objectMapper.valueToTree(output));
         byte[] serialized;
         try {
             serialized = objectMapper.writeValueAsBytes(content);
@@ -161,6 +166,15 @@ public final class ToolGateway {
                 duration,
                 null,
                 clock.instant()));
+        LOGGER.atInfo()
+                .addKeyValue("event", "INCIDENT_TOOL_EXECUTED")
+                .addKeyValue("incidentId", incidentId)
+                .addKeyValue("toolName", toolName)
+                .addKeyValue("toolVersion", handler.definition().version())
+                .addKeyValue("success", true)
+                .addKeyValue("evidenceCount", result.evidenceIds().size())
+                .addKeyValue("durationMs", duration.toMillis())
+                .log("Incident tool executed");
         return result;
     }
 
@@ -189,6 +203,15 @@ public final class ToolGateway {
                 duration,
                 errorCode,
                 clock.instant()));
+        LOGGER.atWarn()
+                .addKeyValue("event", "INCIDENT_TOOL_FAILED")
+                .addKeyValue("incidentId", incidentId)
+                .addKeyValue("toolName", toolName)
+                .addKeyValue("toolVersion", version)
+                .addKeyValue("success", false)
+                .addKeyValue("errorCode", errorCode)
+                .addKeyValue("durationMs", duration.toMillis())
+                .log("Incident tool failed");
         return result;
     }
 
@@ -213,8 +236,21 @@ public final class ToolGateway {
             case "get_payment_timeline" -> "PAYMENT_TIMELINE";
             case "query_channel_final_state" -> "CHANNEL_FINAL_STATE";
             case "calculate_incident_impact" -> "INCIDENT_IMPACT";
+            case "query_service_metrics" -> "SERVICE_METRICS";
+            case "search_structured_logs" -> "STRUCTURED_LOGS";
+            case "get_distributed_trace" -> "DISTRIBUTED_TRACE";
             default -> toolName.toUpperCase(java.util.Locale.ROOT);
         };
+    }
+
+    private String executionErrorCode(Throwable cause) {
+        if (cause instanceof ObservabilityBackendException observabilityFailure) {
+            return "OBSERVABILITY_" + observabilityFailure.code().name();
+        }
+        if (cause instanceof IllegalArgumentException) {
+            return "INVALID_ARGUMENTS";
+        }
+        return "TOOL_EXECUTION_FAILED";
     }
 
     private String sha256(byte[] content) {
@@ -224,5 +260,22 @@ public final class ToolGateway {
         } catch (NoSuchAlgorithmException exception) {
             throw new IllegalStateException("SHA-256 must be available", exception);
         }
+    }
+
+    private JsonNode canonicalize(JsonNode node) {
+        if (node.isObject()) {
+            var canonical = objectMapper.createObjectNode();
+            node.propertyStream()
+                    .sorted(Map.Entry.comparingByKey())
+                    .forEach(entry -> canonical.set(
+                            entry.getKey(), canonicalize(entry.getValue())));
+            return canonical;
+        }
+        if (node.isArray()) {
+            var canonical = objectMapper.createArrayNode();
+            node.forEach(item -> canonical.add(canonicalize(item)));
+            return canonical;
+        }
+        return node.deepCopy();
     }
 }

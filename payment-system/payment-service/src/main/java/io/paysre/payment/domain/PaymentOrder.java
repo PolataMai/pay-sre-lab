@@ -99,6 +99,23 @@ public final class PaymentOrder {
         transition(PaymentStatus.SUCCESS, "CHANNEL_QUERY", channelCode, now);
     }
 
+    public void confirmUnknownFailure(String channelCode, Instant now) {
+        require(PaymentStatus.UNKNOWN);
+        transition(PaymentStatus.FAILED, "CHANNEL_QUERY", channelCode, now);
+    }
+
+    /**
+     * Records a sync attempt whose channel return code was not in the
+     * configured mapping. The payment stays UNKNOWN (no terminal state
+     * is guessed) but the event is appended so audit / control plane
+     * can surface the misconfiguration.
+     */
+    public void recordUnmappedCode(String reasonCode, Instant now) {
+        require(PaymentStatus.UNKNOWN);
+        events.add(new PaymentEvent(now, status, status, "CHANNEL_QUERY", reasonCode));
+        updatedAt = now;
+    }
+
     private void require(PaymentStatus expected) {
         if (status != expected) {
             throw new IllegalStateException("expected " + expected + " but was " + status);

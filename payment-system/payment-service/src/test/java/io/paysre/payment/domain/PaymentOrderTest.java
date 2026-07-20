@@ -49,6 +49,31 @@ class PaymentOrderTest {
                         PaymentStatus.SUCCESS);
     }
 
+    @Test
+    void reconciliationCanConfirmAnUnknownPaymentAsFailed() {
+        var payment = payment("P10004");
+        payment.start("CHANNEL_A", "route-v1", Instant.EPOCH);
+        payment.markUnknown("CHANNEL_TIMEOUT", Instant.EPOCH.plusSeconds(1));
+
+        payment.confirmUnknownFailure("51", Instant.EPOCH.plusSeconds(2));
+
+        assertThat(payment.status()).isEqualTo(PaymentStatus.FAILED);
+        var last = payment.events().get(payment.events().size() - 1);
+        assertThat(last.source()).isEqualTo("CHANNEL_QUERY");
+        assertThat(last.reasonCode()).isEqualTo("51");
+    }
+
+    @Test
+    void reconciliationOnlyAppliesToUnknownPayments() {
+        var payment = payment("P10005");
+        payment.start("CHANNEL_A", "route-v1", Instant.EPOCH);
+        payment.markSuccess("00", Instant.EPOCH.plusSeconds(1));
+
+        assertThatThrownBy(() -> payment.confirmUnknownFailure("51", Instant.EPOCH.plusSeconds(2)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("expected UNKNOWN but was SUCCESS");
+    }
+
     private PaymentOrder payment(String paymentId) {
         return PaymentOrder.create(
                 paymentId,

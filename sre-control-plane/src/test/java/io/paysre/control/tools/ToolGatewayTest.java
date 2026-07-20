@@ -5,10 +5,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.paysre.control.evidence.Evidence;
 import io.paysre.control.evidence.EvidenceRepository;
+import io.paysre.control.observability.ObservabilityBackendException;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -121,6 +123,33 @@ class ToolGatewayTest {
     }
 
     @Test
+    void hashesCanonicalJsonSoPersistedContentCanBeIndependentlyVerified()
+            throws Exception {
+        var output = new LinkedHashMap<String, Object>();
+        output.put("zField", "last");
+        output.put("aField", Map.of("z", 2, "a", 1));
+        var handler = handler(
+                "read_tool",
+                Duration.ofSeconds(1),
+                65_536,
+                input -> output);
+
+        gateway(List.of(handler)).execute(
+                "INC-01", "agent-1", handler.definition().name(),
+                objectMapper.createObjectNode());
+
+        assertThat(evidence.items.values()).singleElement()
+                .satisfies(item -> {
+                    assertThat(item.content().propertyStream().map(Map.Entry::getKey))
+                            .containsExactly("aField", "zField");
+                    assertThat(item.content().path("aField").propertyStream()
+                                    .map(Map.Entry::getKey))
+                            .containsExactly("a", "z");
+                    assertThat(item.sha256()).isEqualTo(hexSha256(item.content()));
+                });
+    }
+
+    @Test
     void rejectsImmediatelyAndAuditsWhenTheWorkerPoolIsExhausted() throws Exception {
         var saturated = new ThreadPoolExecutor(
                 1,
@@ -159,8 +188,88 @@ class ToolGatewayTest {
         }
     }
 
+    @Test
+    void mapsObservabilityFailuresToStableAuditedCodesWithoutLeakingDetails() {
+        var handler = handler(
+                "query_service_metrics",
+                Duration.ofSeconds(1),
+                1_024,
+                input -> {
+                    throw new ObservabilityBackendException(
+                            ObservabilityBackendException.Code.BACKEND_UNAVAILABLE,
+                            "private backend response");
+                });
+
+        var result = gateway(List.of(handler)).execute(
+                "INC-01",
+                "agent-1",
+                "query_service_metrics",
+                objectMapper.createObjectNode());
+
+        assertThat(result.successful()).isFalse();
+        assertThat(result.errorCode()).isEqualTo("OBSERVABILITY_BACKEND_UNAVAILABLE");
+        assertThat(result.toString()).doesNotContain("private backend response");
+        assertThat(audit.invocations).singleElement()
+                .satisfies(invocation -> assertThat(invocation.errorCode())
+                        .isEqualTo("OBSERVABILITY_BACKEND_UNAVAILABLE"));
+    }
+
+    @Test
+    void mapsHandlerValidationFailuresToInvalidArguments() {
+        var handler = handler(
+                "search_structured_logs",
+                Duration.ofSeconds(1),
+                1_024,
+                input -> {
+                    throw new IllegalArgumentException("unsafe caller detail");
+                });
+
+        var result = gateway(List.of(handler)).execute(
+                "INC-01",
+                "agent-1",
+                "search_structured_logs",
+                objectMapper.createObjectNode());
+
+        assertThat(result.successful()).isFalse();
+        assertThat(result.errorCode()).isEqualTo("INVALID_ARGUMENTS");
+        assertThat(result.toString()).doesNotContain("unsafe caller detail");
+    }
+
+    @Test
+    void assignsExplicitEvidenceTypesToObservabilityTools() {
+        var handlers = List.of(
+                handler("query_service_metrics", Duration.ofSeconds(1), 1_024,
+                        input -> Map.of("signal", "PAYMENT_UNKNOWN_CURRENT")),
+                handler("search_structured_logs", Duration.ofSeconds(1), 1_024,
+                        input -> Map.of("records", List.of())),
+                handler("get_distributed_trace", Duration.ofSeconds(1), 1_024,
+                        input -> Map.of("traceId", "5b8efff798038103d269b633813fc700")));
+        var gateway = gateway(List.copyOf(handlers));
+
+        handlers.forEach(handler -> gateway.execute(
+                "INC-01",
+                "agent-1",
+                handler.definition().name(),
+                objectMapper.createObjectNode()));
+
+        assertThat(evidence.items.values())
+                .extracting(Evidence::evidenceType)
+                .containsExactlyInAnyOrder(
+                        "SERVICE_METRICS", "STRUCTURED_LOGS", "DISTRIBUTED_TRACE");
+    }
+
     private ToolGateway gateway(List<ToolHandler<?, ?>> handlers) {
         return gateway(handlers, executor);
+    }
+
+    private String hexSha256(com.fasterxml.jackson.databind.JsonNode content) {
+        try {
+            return java.util.HexFormat.of().formatHex(
+                    MessageDigest.getInstance("SHA-256")
+                            .digest(objectMapper.writeValueAsBytes(content)));
+        } catch (Exception exception) {
+            throw new AssertionError(exception);
+        }
     }
 
     private ToolGateway gateway(List<ToolHandler<?, ?>> handlers, ExecutorService workerPool) {
@@ -233,6 +342,13 @@ class ToolGatewayTest {
         @Override
         public void record(ToolInvocation invocation) {
             invocations.add(invocation);
+        }
+
+        @Override
+        public List<ToolInvocation> findByIncidentId(String incidentId) {
+            return invocations.stream()
+                    .filter(item -> item.incidentId().equals(incidentId))
+                    .toList();
         }
     }
 }

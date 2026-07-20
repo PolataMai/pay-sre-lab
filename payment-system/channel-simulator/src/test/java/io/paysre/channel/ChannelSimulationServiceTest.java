@@ -6,6 +6,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import io.paysre.contracts.ChannelPaymentRequest;
 import io.paysre.contracts.ChannelResult;
 import io.paysre.contracts.Money;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import io.opentelemetry.api.OpenTelemetry;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
@@ -28,7 +30,11 @@ class ChannelSimulationServiceTest {
                 NOW.plusSeconds(60),
                 20260716L));
         var service = new ChannelSimulationService(
-                rules, new FaultDecider(), Clock.fixed(NOW, ZoneOffset.UTC));
+                rules,
+                new FaultDecider(),
+                Clock.fixed(NOW, ZoneOffset.UTC),
+                new ChannelMetrics(new SimpleMeterRegistry()),
+                new ChannelTelemetry(OpenTelemetry.noop().getTracer("test")));
         var request = request("PAY-1");
 
         assertThatThrownBy(() -> service.pay(request))
@@ -42,13 +48,65 @@ class ChannelSimulationServiceTest {
     }
 
     @Test
+    void timeoutCanAlsoHideAFailedFinalState() {
+        var rules = new InMemoryFaultRuleRepository();
+        rules.replace(new FaultRule(
+                "CHANNEL_A",
+                FaultType.TIMEOUT_BUT_FAILED,
+                new BigDecimal("1.00"),
+                NOW.minusSeconds(60),
+                NOW.plusSeconds(60),
+                20260717L));
+        var service = new ChannelSimulationService(
+                rules,
+                new FaultDecider(),
+                Clock.fixed(NOW, ZoneOffset.UTC),
+                new ChannelMetrics(new SimpleMeterRegistry()),
+                new ChannelTelemetry(OpenTelemetry.noop().getTracer("test")));
+
+        assertThatThrownBy(() -> service.pay(request("PAY-9")))
+                .isInstanceOf(ChannelTimeoutException.class);
+
+        var finalState = service.query("PAY-9");
+        assertThat(finalState.result()).isEqualTo(ChannelResult.FAILED);
+        assertThat(finalState.channelCode()).isEqualTo("51");
+    }
+
+    @Test
     void paymentSucceedsNormallyWhenNoFaultRuleIsActive() {
         var service = new ChannelSimulationService(
                 new InMemoryFaultRuleRepository(),
                 new FaultDecider(),
-                Clock.fixed(NOW, ZoneOffset.UTC));
+                Clock.fixed(NOW, ZoneOffset.UTC),
+                new ChannelMetrics(new SimpleMeterRegistry()),
+                new ChannelTelemetry(OpenTelemetry.noop().getTracer("test")));
 
         assertThat(service.pay(request("PAY-2")).result()).isEqualTo(ChannelResult.SUCCESS);
+    }
+
+    @Test
+    void declineAllFaultReturnsAnImmediateFailedFinalState() {
+        var rules = new InMemoryFaultRuleRepository();
+        rules.replace(new FaultRule(
+                "CHANNEL_A",
+                FaultType.DECLINE_ALL,
+                new BigDecimal("1.00"),
+                NOW.minusSeconds(60),
+                NOW.plusSeconds(60),
+                20260718L));
+        var service = new ChannelSimulationService(
+                rules,
+                new FaultDecider(),
+                Clock.fixed(NOW, ZoneOffset.UTC),
+                new ChannelMetrics(new SimpleMeterRegistry()),
+                new ChannelTelemetry(OpenTelemetry.noop().getTracer("test")));
+
+        var response = service.pay(request("PAY-3"));
+
+        assertThat(response.result()).isEqualTo(ChannelResult.FAILED);
+        assertThat(response.channelCode()).isEqualTo("05");
+        assertThat(service.query("PAY-3").result())
+                .isEqualTo(ChannelResult.FAILED);
     }
 
     @Test
@@ -56,7 +114,9 @@ class ChannelSimulationServiceTest {
         var service = new ChannelSimulationService(
                 new InMemoryFaultRuleRepository(),
                 new FaultDecider(),
-                Clock.fixed(NOW, ZoneOffset.UTC));
+                Clock.fixed(NOW, ZoneOffset.UTC),
+                new ChannelMetrics(new SimpleMeterRegistry()),
+                new ChannelTelemetry(OpenTelemetry.noop().getTracer("test")));
 
         assertThatThrownBy(() -> service.query("MISSING"))
                 .isInstanceOf(ChannelPaymentNotFoundException.class)

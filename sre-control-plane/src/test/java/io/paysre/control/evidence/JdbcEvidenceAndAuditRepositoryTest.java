@@ -86,6 +86,14 @@ class JdbcEvidenceAndAuditRepositoryTest {
         assertThat(evidenceRepository.findById("EVD-1")).contains(evidence);
         assertThat(evidenceRepository.findByIncidentId("INC-01"))
                 .containsExactly(evidence);
+        assertThat(auditRepository.findByIncidentId("INC-01"))
+                .singleElement()
+                .satisfies(invocation -> {
+                    assertThat(invocation.toolName())
+                            .isEqualTo("query_channel_final_state");
+                    assertThat(invocation.evidenceIds()).containsExactly("EVD-1");
+                    assertThat(invocation.duration()).isEqualTo(Duration.ofMillis(12));
+                });
         assertThat(jdbc.queryForObject(
                         "select count(*) from tool_invocation where incident_id = 'INC-01'",
                         Integer.class))

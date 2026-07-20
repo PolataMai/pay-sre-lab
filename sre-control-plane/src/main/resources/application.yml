@@ -7,19 +7,75 @@ spring:
     password: ${CONTROL_DB_PASSWORD:paysre}
   flyway:
     enabled: true
+  cloud:
+    nacos:
+      config:
+        import-check:
+          enabled: false
 
 paysre:
   payment:
     base-url: ${PAYMENT_SERVICE_BASE_URL:http://localhost:8080}
   channel:
     base-url: ${CHANNEL_SIMULATOR_BASE_URL:http://localhost:8081}
+  observability:
+    prometheus:
+      base-url: ${PROMETHEUS_BASE_URL:http://localhost:9090}
+    loki:
+      base-url: ${LOKI_BASE_URL:http://localhost:3100}
+    tempo:
+      base-url: ${TEMPO_BASE_URL:http://localhost:3200}
   investigation:
+    model: ${INVESTIGATION_MODEL:stub}
     model-timeout: ${INVESTIGATION_MODEL_TIMEOUT:PT10S}
+    minimax:
+      base-url: ${MINIMAX_BASE_URL:https://api.minimax.io/v1}
+      api-key: ${MINIMAX_API_KEY:}
+      model: ${MINIMAX_MODEL:MiniMax-M2}
+      temperature: ${MINIMAX_TEMPERATURE:1.0}
+      max-completion-tokens: ${MINIMAX_MAX_COMPLETION_TOKENS:4096}
+      read-timeout: ${MINIMAX_READ_TIMEOUT:PT45S}
 
 server:
   port: ${CONTROL_PLANE_PORT:8082}
 
+logging:
+  structured:
+    format:
+      console: ecs
+      file: ecs
+
 management:
+  otlp:
+    metrics:
+      export:
+        enabled: false
+  logging:
+    export:
+      otlp:
+        enabled: false
+  tracing:
+    sampling:
+      probability: 1.0
+    propagation:
+      type: w3c
+    export:
+      otlp:
+        enabled: ${OTEL_TRACES_EXPORT_ENABLED:false}
+  opentelemetry:
+    resource-attributes:
+      deployment.environment: ${DEPLOYMENT_ENVIRONMENT:lab}
+    tracing:
+      limits:
+        max-attributes: 64
+        max-attribute-value-length: 256
+        max-events: 64
+        max-links: 16
+      export:
+        otlp:
+          endpoint: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:http://localhost:4318/v1/traces}
+          connect-timeout: 1s
+          timeout: 3s
   endpoint:
     health:
       probes:
@@ -27,4 +83,4 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics
+        include: health,info,metrics,prometheus

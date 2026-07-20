@@ -92,6 +92,23 @@ class PaymentApplicationServiceTest {
                 .isEqualTo(1.0);
     }
 
+    @Test
+    void unmappedChannelCodeLeavesThePaymentUnknownRatherThanGuessingFailed() {
+        var repository = new InMemoryPaymentRepository();
+        ChannelClient channel = request -> new ChannelPaymentResponse(
+                request.requestId(),
+                request.paymentId(),
+                ChannelResult.SUCCESS,
+                "E9",
+                NOW);
+        var service = service(repository, channel);
+
+        var payment = service.accept(command("IDEMPOTENCY-UNMAPPED"));
+
+        assertThat(payment.status()).isEqualTo(PaymentStatus.UNKNOWN);
+        assertThat(lastEvent(payment).reasonCode()).isEqualTo("CHANNEL_CODE_UNMAPPED");
+    }
+
     private PaymentApplicationService service(
             PaymentRepository repository, ChannelClient channelClient) {
         return service(repository, channelClient, new SimpleMeterRegistry());
@@ -107,7 +124,12 @@ class PaymentApplicationServiceTest {
                 () -> "P10001",
                 Clock.fixed(NOW, ZoneOffset.UTC),
                 new PaymentMetrics(registry),
-                new PaymentTelemetry(OpenTelemetry.noop().getTracer("test")));
+                new PaymentTelemetry(OpenTelemetry.noop().getTracer("test")),
+                new ChannelReturnCodeMapping.Fixed(
+                        java.util.Set.of("00"),
+                        java.util.Set.of("51", "05", "96")),
+                new io.paysre.payment.application.ChannelRouter.Static(
+                        "CHANNEL_A", java.util.Map.of()));
     }
 
     private AcceptPaymentCommand command(String idempotencyKey) {

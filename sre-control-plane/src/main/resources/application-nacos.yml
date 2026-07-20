@@ -1,0 +1,13 @@
+# Nacos config center integration, active only with the "nacos" profile.
+# Connection values come exclusively from environment variables; the real
+# values belong in deploy/.env (gitignored) and must never be committed.
+spring:
+  config:
+    import: "nacos:${NACOS_DATA_ID:sre-control-plane.yml}?group=${NACOS_GROUP:pay-sre-lab}"
+  cloud:
+    nacos:
+      server-addr: ${NACOS_SERVER_ADDR}
+      username: ${NACOS_USERNAME:}
+      password: ${NACOS_PASSWORD:}
+      config:
+        namespace: ${NACOS_NAMESPACE:}

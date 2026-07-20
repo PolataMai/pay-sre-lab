@@ -8,6 +8,8 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -19,6 +21,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 public final class AlertWebhookController {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(AlertWebhookController.class);
 
     private final IncidentApplicationService incidentService;
     private final IncidentRepository repository;
@@ -34,11 +38,18 @@ public final class AlertWebhookController {
         if (webhook.alerts().isEmpty()) {
             throw new IllegalArgumentException("at least one alert is required");
         }
-        return webhook.alerts().stream()
+        var incidents = webhook.alerts().stream()
                 .map(this::toSignal)
                 .map(incidentService::ingest)
                 .map(IncidentView::from)
                 .toList();
+        incidents.forEach(incident -> LOGGER.atInfo()
+                .addKeyValue("event", "ALERT_INGESTED")
+                .addKeyValue("incidentId", incident.incidentId())
+                .addKeyValue("aggregateKey", incident.aggregateKey())
+                .addKeyValue("incidentStatus", incident.status().name())
+                .log("Alert ingested"));
+        return incidents;
     }
 
     @GetMapping("/api/incidents/{incidentId}")

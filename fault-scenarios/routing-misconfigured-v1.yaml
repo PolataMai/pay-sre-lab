@@ -1,0 +1,21 @@
+id: routing-misconfigured-v1
+seed: 20260721
+fault:
+  channel: CHANNEL_A
+  type: NONE
+  probability: 1.00
+  activeFor: PT2M
+traffic:
+  payments: 5
+  amount: "10.00"
+  currency: CNY
+expected:
+  rootCause: ROUTING_MISCONFIGURED
+  advisory: true
+  minimumEvidenceCount: 3
+  requiredEvidenceTypes:
+    - SERVICE_METRICS
+    - PAYMENT_TIMELINE
+    - INCIDENT_IMPACT
+  recommendedRunbook: ""
+  requiresHumanReview: true

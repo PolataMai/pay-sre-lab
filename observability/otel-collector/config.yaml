@@ -1,0 +1,74 @@
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+  filelog/paysre:
+    include:
+      - /var/log/paysre/*.json
+    exclude:
+      - /var/log/paysre/otel-collector*.json
+    start_at: beginning
+    include_file_path: true
+    operators:
+      - type: json_parser
+        parse_from: body
+        timestamp:
+          parse_from: attributes["@timestamp"]
+          layout_type: gotime
+          layout: "2006-01-02T15:04:05.999999999Z07:00"
+        severity:
+          parse_from: attributes["log"]["level"]
+      - type: trace_parser
+        if: 'attributes.traceId != nil and attributes.spanId != nil'
+        trace_id:
+          parse_from: attributes.traceId
+        span_id:
+          parse_from: attributes.spanId
+        on_error: send
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 256
+    spike_limit_mib: 64
+  transform/paysre_logs:
+    error_mode: ignore
+    log_statements:
+      - context: log
+        statements:
+          - set(resource.attributes["service.name"], log.attributes["service"]["name"])
+  batch:
+    timeout: 1s
+    send_batch_size: 512
+
+exporters:
+  otlphttp/tempo:
+    endpoint: http://tempo:4318
+    tls:
+      insecure: true
+  otlphttp/loki:
+    endpoint: http://loki:3100/otlp
+    tls:
+      insecure: true
+
+service:
+  extensions: [health_check]
+  telemetry:
+    logs:
+      level: info
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlphttp/tempo]
+    logs:
+      receivers: [filelog/paysre]
+      processors: [memory_limiter, transform/paysre_logs, batch]
+      exporters: [otlphttp/loki]

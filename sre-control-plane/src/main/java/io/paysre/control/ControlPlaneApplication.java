@@ -10,20 +10,41 @@ import io.paysre.control.investigation.ConclusionValidator;
 import io.paysre.control.investigation.InvestigationConclusionRepository;
 import io.paysre.control.investigation.InvestigationModel;
 import io.paysre.control.investigation.InvestigationOrchestrator;
+import io.paysre.control.investigation.RootCausePolicyCatalog;
 import io.paysre.control.investigation.StubInvestigationModel;
+import io.paysre.control.investigation.minimax.HttpMiniMaxChatClient;
+import io.paysre.control.investigation.minimax.MiniMaxInvestigationModel;
+import io.paysre.control.observability.HttpLokiReadClient;
+import io.paysre.control.remediation.ActionAuditRepository;
+import io.paysre.control.remediation.ActionGuard;
+import io.paysre.control.remediation.HttpPaymentWriteClient;
+import io.paysre.control.remediation.PaymentWriteClient;
+import io.paysre.control.remediation.QueryAndSyncUnknownPaymentsRunbook;
+import io.paysre.control.remediation.Runbook;
+import io.paysre.control.remediation.RunbookExecutionRepository;
+import io.paysre.control.remediation.RunbookExecutionService;
+import io.paysre.control.observability.HttpPrometheusReadClient;
+import io.paysre.control.observability.HttpTempoReadClient;
+import io.paysre.control.observability.LokiReadClient;
+import io.paysre.control.observability.PrometheusReadClient;
+import io.paysre.control.observability.TempoReadClient;
 import io.paysre.control.tools.CalculateIncidentImpactTool;
 import io.paysre.control.tools.ChannelReadClient;
+import io.paysre.control.tools.GetDistributedTraceTool;
 import io.paysre.control.tools.GetPaymentTimelineTool;
 import io.paysre.control.tools.HttpChannelReadClient;
 import io.paysre.control.tools.HttpPaymentReadClient;
 import io.paysre.control.tools.PaymentReadClient;
+import io.paysre.control.tools.QueryServiceMetricsTool;
 import io.paysre.control.tools.QueryChannelFinalStateTool;
+import io.paysre.control.tools.SearchStructuredLogsTool;
 import io.paysre.control.tools.ToolAuditRepository;
 import io.paysre.control.tools.ToolGateway;
 import io.paysre.control.tools.ToolHandler;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
@@ -69,15 +90,49 @@ public class ControlPlaneApplication {
     @Bean
     PaymentReadClient paymentReadClient(
             @Value("${paysre.payment.base-url}") String baseUrl,
+            RestClient.Builder restClientBuilder,
             ObjectMapper objectMapper) {
-        return new HttpPaymentReadClient(readOnlyRestClient(baseUrl), objectMapper);
+        return new HttpPaymentReadClient(
+                readOnlyRestClient(restClientBuilder, baseUrl), objectMapper);
     }
 
     @Bean
     ChannelReadClient channelReadClient(
             @Value("${paysre.channel.base-url}") String baseUrl,
+            RestClient.Builder restClientBuilder,
             ObjectMapper objectMapper) {
-        return new HttpChannelReadClient(readOnlyRestClient(baseUrl), objectMapper);
+        return new HttpChannelReadClient(
+                readOnlyRestClient(restClientBuilder, baseUrl), objectMapper);
+    }
+
+    @Bean
+    PrometheusReadClient prometheusReadClient(
+            @Value("${paysre.observability.prometheus.base-url}") String baseUrl,
+            RestClient.Builder restClientBuilder,
+            ObjectMapper objectMapper,
+            Clock clock) {
+        return new HttpPrometheusReadClient(
+                readOnlyRestClient(restClientBuilder, baseUrl), objectMapper, clock);
+    }
+
+    @Bean
+    LokiReadClient lokiReadClient(
+            @Value("${paysre.observability.loki.base-url}") String baseUrl,
+            RestClient.Builder restClientBuilder,
+            ObjectMapper objectMapper,
+            Clock clock) {
+        return new HttpLokiReadClient(
+                readOnlyRestClient(restClientBuilder, baseUrl), objectMapper, clock);
+    }
+
+    @Bean
+    TempoReadClient tempoReadClient(
+            @Value("${paysre.observability.tempo.base-url}") String baseUrl,
+            RestClient.Builder restClientBuilder,
+            ObjectMapper objectMapper,
+            Clock clock) {
+        return new HttpTempoReadClient(
+                readOnlyRestClient(restClientBuilder, baseUrl), objectMapper, clock);
     }
 
     @Bean
@@ -93,6 +148,21 @@ public class ControlPlaneApplication {
     @Bean
     CalculateIncidentImpactTool calculateIncidentImpactTool(PaymentReadClient client) {
         return new CalculateIncidentImpactTool(client);
+    }
+
+    @Bean
+    QueryServiceMetricsTool queryServiceMetricsTool(PrometheusReadClient client) {
+        return new QueryServiceMetricsTool(client);
+    }
+
+    @Bean
+    SearchStructuredLogsTool searchStructuredLogsTool(LokiReadClient client) {
+        return new SearchStructuredLogsTool(client);
+    }
+
+    @Bean
+    GetDistributedTraceTool getDistributedTraceTool(TempoReadClient client) {
+        return new GetDistributedTraceTool(client);
     }
 
     @Bean(destroyMethod = "shutdown")
@@ -150,13 +220,138 @@ public class ControlPlaneApplication {
     }
 
     @Bean
-    InvestigationModel investigationModel(ObjectMapper objectMapper) {
-        return new StubInvestigationModel(objectMapper);
+    InvestigationModel investigationModel(
+            @Value("${paysre.investigation.model}") String modelMode,
+            @Value("${paysre.investigation.minimax.base-url}") String miniMaxBaseUrl,
+            @Value("${paysre.investigation.minimax.api-key}") String miniMaxApiKey,
+            @Value("${paysre.investigation.minimax.model}") String miniMaxModel,
+            @Value("${paysre.investigation.minimax.temperature}") double miniMaxTemperature,
+            @Value("${paysre.investigation.minimax.max-completion-tokens}")
+                    int miniMaxMaxCompletionTokens,
+            @Value("${paysre.investigation.minimax.read-timeout}") Duration miniMaxReadTimeout,
+            RestClient.Builder restClientBuilder,
+            ObjectMapper objectMapper,
+            Clock clock) {
+        return switch (modelMode) {
+            case "stub" -> new StubInvestigationModel(objectMapper, clock);
+            case "minimax" -> {
+                if (miniMaxApiKey.isBlank()) {
+                    throw new IllegalStateException(
+                            "MINIMAX_API_KEY must be set when "
+                                    + "paysre.investigation.model is minimax");
+                }
+                var requestFactory = new SimpleClientHttpRequestFactory();
+                requestFactory.setConnectTimeout(Duration.ofSeconds(2));
+                requestFactory.setReadTimeout(miniMaxReadTimeout);
+                var restClient = restClientBuilder.clone()
+                        .baseUrl(miniMaxBaseUrl)
+                        .defaultHeader("Authorization", "Bearer " + miniMaxApiKey)
+                        .requestFactory(requestFactory)
+                        .build();
+                yield new MiniMaxInvestigationModel(
+                        new HttpMiniMaxChatClient(
+                                restClient,
+                                objectMapper,
+                                miniMaxModel,
+                                miniMaxTemperature,
+                                miniMaxMaxCompletionTokens),
+                        objectMapper,
+                        rootCausePolicyCatalog());
+            }
+            default -> throw new IllegalArgumentException(
+                    "unsupported investigation model: " + modelMode);
+        };
     }
 
     @Bean
     ConclusionValidator conclusionValidator(EvidenceRepository evidenceRepository) {
-        return new ConclusionValidator(evidenceRepository);
+        return new ConclusionValidator(evidenceRepository, rootCausePolicyCatalog());
+    }
+
+    @Bean
+    RootCausePolicyCatalog rootCausePolicyCatalog() {
+        return RootCausePolicyCatalog.defaults();
+    }
+
+    @Bean
+    PaymentWriteClient paymentWriteClient(
+            @Value("${paysre.payment.base-url}") String baseUrl,
+            RestClient.Builder restClientBuilder,
+            ObjectMapper objectMapper) {
+        var requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(Duration.ofSeconds(2));
+        requestFactory.setReadTimeout(Duration.ofSeconds(5));
+        var restClient = restClientBuilder.clone()
+                .baseUrl(baseUrl)
+                .requestFactory(requestFactory)
+                .build();
+        return new HttpPaymentWriteClient(restClient, objectMapper);
+    }
+
+    @Bean
+    QueryAndSyncUnknownPaymentsRunbook queryAndSyncUnknownPaymentsRunbook(
+            EvidenceRepository evidenceRepository,
+            PaymentWriteClient paymentWriteClient,
+            ObjectMapper objectMapper) {
+        return new QueryAndSyncUnknownPaymentsRunbook(
+                evidenceRepository, paymentWriteClient, objectMapper);
+    }
+
+    @Bean
+    ActionGuard actionGuard(
+            IncidentRepository incidentRepository,
+            InvestigationConclusionRepository conclusionRepository,
+            RunbookExecutionRepository executionRepository,
+            ActionAuditRepository actionAuditRepository,
+            Clock clock) {
+        return new ActionGuard(
+                Set.of(QueryAndSyncUnknownPaymentsRunbook.NAME),
+                incidentRepository,
+                conclusionRepository,
+                executionRepository,
+                actionAuditRepository,
+                clock,
+                () -> "ACT-" + UUID.randomUUID().toString().replace("-", ""));
+    }
+
+    @Bean(destroyMethod = "shutdown")
+    ExecutorService runbookExecutor() {
+        var sequence = new AtomicInteger();
+        return new ThreadPoolExecutor(
+                1,
+                1,
+                60,
+                TimeUnit.SECONDS,
+                new ArrayBlockingQueue<>(4),
+                runnable -> {
+                    var thread = new Thread(
+                            runnable, "paysre-runbook-" + sequence.incrementAndGet());
+                    thread.setDaemon(true);
+                    return thread;
+                },
+                new ThreadPoolExecutor.AbortPolicy());
+    }
+
+    @Bean
+    RunbookExecutionService runbookExecutionService(
+            ActionGuard actionGuard,
+            List<Runbook> runbooks,
+            RunbookExecutionRepository executionRepository,
+            IncidentRepository incidentRepository,
+            InvestigationConclusionRepository conclusionRepository,
+            Clock clock,
+            @Qualifier("runbookExecutor") ExecutorService runbookExecutor,
+            @Value("${paysre.remediation.execution-timeout:PT60S}") Duration executionTimeout) {
+        return new RunbookExecutionService(
+                actionGuard,
+                runbooks,
+                executionRepository,
+                incidentRepository,
+                conclusionRepository,
+                clock,
+                runbookExecutor,
+                executionTimeout,
+                () -> "RUN-" + UUID.randomUUID().toString().replace("-", ""));
     }
 
     @Bean
@@ -182,11 +377,11 @@ public class ControlPlaneApplication {
                 modelTimeout);
     }
 
-    private RestClient readOnlyRestClient(String baseUrl) {
+    private RestClient readOnlyRestClient(RestClient.Builder builder, String baseUrl) {
         var requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(Duration.ofSeconds(1));
         requestFactory.setReadTimeout(Duration.ofSeconds(3));
-        return RestClient.builder()
+        return builder.clone()
                 .baseUrl(baseUrl)
                 .requestFactory(requestFactory)
                 .build();

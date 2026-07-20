@@ -1,0 +1,69 @@
+{
+  "annotations": {"list": []},
+  "editable": false,
+  "panels": [
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 0},
+      "id": 1,
+      "targets": [{"expr": "sum by (channel) (payment_unknown_current)", "legendFormat": "{{channel}}", "refId": "A"}],
+      "title": "Unknown payments by channel",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "ops"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 0},
+      "id": 2,
+      "targets": [{"expr": "sum by (channel, status) (rate(payment_attempt_outcome_total[1m]))", "legendFormat": "{{channel}} {{status}}", "refId": "A"}],
+      "title": "Payment outcomes",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "percentunit"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 0},
+      "id": 3,
+      "targets": [{"expr": "sum by (channel) (rate(channel_request_total{result=\"TIMEOUT\"}[1m])) / clamp_min(sum by (channel) (rate(channel_request_total[1m])), 0.001)", "legendFormat": "{{channel}}", "refId": "A"}],
+      "title": "Channel timeout ratio",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "id": 4,
+      "targets": [{"expr": "histogram_quantile(0.95, sum by (le, channel) (rate(channel_request_duration_seconds_bucket[5m])))", "legendFormat": "{{channel}}", "refId": "A"}],
+      "title": "Channel request P95",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "loki", "uid": "loki"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "id": 5,
+      "options": {"showTime": true, "wrapLogMessage": true},
+      "targets": [{"expr": "{service_name=\"payment-service\"} | event=`PAYMENT_STATE_CHANGED`", "refId": "A"}],
+      "title": "Payment state changes",
+      "type": "logs"
+    },
+    {
+      "datasource": {"type": "loki", "uid": "loki"},
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 16},
+      "id": 6,
+      "options": {"showTime": true, "wrapLogMessage": true},
+      "targets": [{"expr": "{service_name=~\"payment-service|channel-simulator|sre-control-plane\"} | traceId != ``", "refId": "A"}],
+      "title": "Trace-correlated incident events",
+      "type": "logs"
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 42,
+  "tags": ["paysre", "payment", "incident"],
+  "templating": {"list": []},
+  "time": {"from": "now-15m", "to": "now"},
+  "timezone": "browser",
+  "title": "PaySRE Payment Incident",
+  "uid": "paysre-payment-incident",
+  "version": 1
+}

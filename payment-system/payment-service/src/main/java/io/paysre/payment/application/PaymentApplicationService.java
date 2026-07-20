@@ -9,8 +9,12 @@ import io.paysre.payment.observability.PaymentTelemetry;
 import java.time.Clock;
 import java.util.Objects;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public final class PaymentApplicationService {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(PaymentApplicationService.class);
 
     private final PaymentRepository repository;
     private final ChannelClient channelClient;
@@ -18,6 +22,8 @@ public final class PaymentApplicationService {
     private final Clock clock;
     private final PaymentMetrics metrics;
     private final PaymentTelemetry telemetry;
+    private final ChannelReturnCodeMapping returnCodeMapping;
+    private final ChannelRouter router;
 
     public PaymentApplicationService(
             PaymentRepository repository,
@@ -25,13 +31,17 @@ public final class PaymentApplicationService {
             PaymentIdGenerator ids,
             Clock clock,
             PaymentMetrics metrics,
-            PaymentTelemetry telemetry) {
+            PaymentTelemetry telemetry,
+            ChannelReturnCodeMapping returnCodeMapping,
+            ChannelRouter router) {
         this.repository = Objects.requireNonNull(repository, "repository");
         this.channelClient = Objects.requireNonNull(channelClient, "channelClient");
         this.ids = Objects.requireNonNull(ids, "ids");
         this.clock = Objects.requireNonNull(clock, "clock");
         this.metrics = Objects.requireNonNull(metrics, "metrics");
         this.telemetry = Objects.requireNonNull(telemetry, "telemetry");
+        this.returnCodeMapping = Objects.requireNonNull(returnCodeMapping, "returnCodeMapping");
+        this.router = Objects.requireNonNull(router, "router");
     }
 
     public PaymentOrder accept(AcceptPaymentCommand command) {
@@ -48,7 +58,7 @@ public final class PaymentApplicationService {
                 command.merchantId(),
                 command.money(),
                 now);
-        payment.start("CHANNEL_A", "route-v1", now);
+        payment.start(router.selectChannel(command.merchantId()), "route-v1", now);
         var inserted = repository.save(payment, command.idempotencyKey());
         if (inserted != payment) {
             return inserted;
@@ -61,12 +71,18 @@ public final class PaymentApplicationService {
                     payment.paymentId(),
                     payment.channel(),
                     () -> channelClient.pay(toChannelRequest(payment)));
-            if (response.result() == ChannelResult.SUCCESS) {
-                payment.markSuccess(response.channelCode(), clock.instant());
-            } else if (response.result() == ChannelResult.FAILED) {
-                payment.markFailed(response.channelCode(), clock.instant());
-            } else {
+            if (response.result() == ChannelResult.TIMEOUT) {
                 payment.markUnknown("CHANNEL_TIMEOUT", clock.instant());
+            } else {
+                var mapped = returnCodeMapping.map(response.channelCode());
+                switch (mapped.kind()) {
+                    case MAPPED_SUCCESS -> payment.markSuccess(
+                            response.channelCode(), clock.instant());
+                    case MAPPED_FAILURE -> payment.markFailed(
+                            response.channelCode(), clock.instant());
+                    case UNMAPPED -> payment.markUnknown(
+                            "CHANNEL_CODE_UNMAPPED", clock.instant());
+                }
             }
         } catch (ChannelCallTimeoutException exception) {
             payment.markUnknown("CHANNEL_TIMEOUT", clock.instant());
@@ -75,7 +91,21 @@ public final class PaymentApplicationService {
         var saved = repository.save(payment, command.idempotencyKey());
         metrics.recordTransition(
                 payment.channel(), PaymentStatus.PROCESSING, payment.status());
+        logTransition(payment);
         return saved;
+    }
+
+    private void logTransition(PaymentOrder payment) {
+        var event = payment.events().get(payment.events().size() - 1);
+        LOGGER.atInfo()
+                .addKeyValue("event", "PAYMENT_STATE_CHANGED")
+                .addKeyValue("paymentId", payment.paymentId())
+                .addKeyValue("orderId", payment.orderId())
+                .addKeyValue("channel", payment.channel())
+                .addKeyValue("fromStatus", PaymentStatus.PROCESSING.name())
+                .addKeyValue("toStatus", payment.status().name())
+                .addKeyValue("reasonCode", event.reasonCode())
+                .log("Payment state changed");
     }
 
     private ChannelPaymentRequest toChannelRequest(PaymentOrder payment) {

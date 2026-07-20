@@ -1,6 +1,8 @@
 package io.paysre.channel;
 
 import java.time.Clock;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.opentelemetry.api.OpenTelemetry;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
@@ -29,7 +31,21 @@ public class ChannelSimulatorApplication {
 
     @Bean
     ChannelSimulationService channelSimulationService(
-            FaultRuleRepository repository, FaultDecider decider, Clock clock) {
-        return new ChannelSimulationService(repository, decider, clock);
+            FaultRuleRepository repository,
+            FaultDecider decider,
+            Clock clock,
+            ChannelMetrics metrics,
+            ChannelTelemetry telemetry) {
+        return new ChannelSimulationService(repository, decider, clock, metrics, telemetry);
+    }
+
+    @Bean
+    ChannelMetrics channelMetrics(MeterRegistry registry) {
+        return new ChannelMetrics(registry);
+    }
+
+    @Bean
+    ChannelTelemetry channelTelemetry(OpenTelemetry openTelemetry) {
+        return new ChannelTelemetry(openTelemetry.getTracer("io.paysre.channel-simulator"));
     }
 }

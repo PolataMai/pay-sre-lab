@@ -69,6 +69,14 @@ public final class Incident {
         transition(IncidentStatus.NEEDS_HUMAN, now);
     }
 
+    public void markMitigated(Instant now) {
+        transition(IncidentStatus.MITIGATED, now);
+    }
+
+    public void markResolved(Instant now) {
+        transition(IncidentStatus.RESOLVED, now);
+    }
+
     private void transition(IncidentStatus target, Instant now) {
         status = target;
         updatedAt = now;
